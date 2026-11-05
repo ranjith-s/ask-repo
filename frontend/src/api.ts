@@ -12,8 +12,10 @@ export interface Repo {
   file_count: number
   chunk_count: number
   indexed_at: string | null
-  embedded_count: number
-  embedding_elapsed_s: number | null
+  progress_done: number
+  progress_total: number | null
+  progress_detail: string | null
+  phase_elapsed_s: number | null
 }
 
 export interface Location {

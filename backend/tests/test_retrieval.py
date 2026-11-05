@@ -64,33 +64,3 @@ async def test_tool_output_is_truncated(store, embedder, indexed_repo):
     small = RepoTools(store, embedder, indexed_repo["id"], max_chars=50)
     out = await small.run("read_file", {"path": "shop/pricing.py", "start_line": 1, "end_line": 30})
     assert out.content.endswith("[truncated; narrow the request]")
-
-
-def test_embedding_progress_is_reported_per_batch(store, embedder, settings):
-    from app.ingest.pipeline import IngestionPipeline
-    from tests.conftest import FIXTURE_REPO
-
-    repo_id = store.upsert_repo("https://github.com/example/progress", "example/progress")
-    seen: list[tuple[str, int, int, float | None]] = []
-    record = store.set_embedding_progress
-
-    def spy(rid: int, embedded: int) -> None:
-        record(rid, embedded)
-        row = store.get_repo(rid)
-        assert row is not None
-        seen.append((row["status"], row["embedded_count"], row["chunk_count"], row["embedding_elapsed_s"]))
-
-    store.set_embedding_progress = spy  # type: ignore[method-assign]
-    try:
-        IngestionPipeline(store, embedder, settings, embed_batch_size=4).run(repo_id, "local", FIXTURE_REPO)
-    finally:
-        del store.set_embedding_progress  # back to the class method
-
-    total = seen[0][2]
-    counts = [count for _, count, _, _ in seen]
-    assert counts == sorted(counts) and counts[-1] == total and len(counts) == -(-total // 4)
-    assert all(status == "embedding" and elapsed is not None and elapsed >= 0 for status, _, _, elapsed in seen)
-
-    done = store.get_repo(repo_id)
-    assert done is not None and done["status"] == "ready"
-    assert done["embedded_count"] == done["chunk_count"] and done["embedding_elapsed_s"] is None

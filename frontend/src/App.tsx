@@ -5,7 +5,7 @@ import { AnswerCard, type Turn } from './components/AnswerCard'
 import { CodePanel } from './components/CodePanel'
 import { ProgressBar } from './components/ProgressBar'
 import { Sidebar } from './components/Sidebar'
-import { embeddingProgress, formatTimeLeft } from './progress'
+import { phaseProgress } from './progress'
 
 const PROVIDER_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', ollama: 'Ollama' }
 
@@ -237,7 +237,7 @@ function IndexingState({ repo }: { repo: Repo }) {
   }
   const steps: Repo['status'][] = ['cloning', 'parsing', 'embedding']
   const current = steps.indexOf(repo.status)
-  const progress = embeddingProgress(repo)
+  const progress = phaseProgress(repo)
   return (
     <div className="pt-16 text-center">
       <Loader2 className="mx-auto size-6 animate-spin text-indigo-500" />
@@ -245,22 +245,23 @@ function IndexingState({ repo }: { repo: Repo }) {
       <ol className="mx-auto mt-4 flex max-w-sm justify-center gap-4 text-xs">
         {steps.map((s, i) => (
           <li key={s} className={i < current ? 'text-emerald-600' : i === current ? 'font-medium text-indigo-600' : 'text-stone-400'}>
-            {i + 1}. {s}
+            {i < current ? '✓' : `${i + 1}.`} {s}
           </li>
         ))}
       </ol>
-      {progress ? (
-        <div className="mx-auto mt-5 max-w-sm">
-          <ProgressBar percent={progress.percent} label={`Embedding ${repo.name}`} />
-          <p className="mt-2 flex justify-between text-xs text-stone-500 tabular-nums">
-            <span>
-              {progress.percent}% · {progress.done.toLocaleString()} of {progress.total.toLocaleString()} chunks
-            </span>
-            <span>{formatTimeLeft(progress.secondsLeft)}</span>
-          </p>
-        </div>
-      ) : (
-        <p className="mt-3 text-xs text-stone-500">Embedding runs on CPU; a mid-sized repo takes about a minute.</p>
+      <div className="mx-auto mt-5 max-w-sm">
+        <ProgressBar percent={progress?.percent ?? 0} label={`Indexing ${repo.name}: ${repo.status}`} />
+        <p className="mt-2 flex justify-between gap-3 text-xs text-stone-500 tabular-nums">
+          <span className="shrink-0">
+            {progress ? `${progress.percent}% · ${progress.summary}` : 'Queued…'}
+          </span>
+          <span className="min-w-0 truncate font-mono text-[11px]" title={progress?.aside}>
+            {progress?.aside}
+          </span>
+        </p>
+      </div>
+      {repo.status === 'embedding' && (
+        <p className="mt-4 text-xs text-stone-400">Embedding runs on CPU; a mid-sized repo takes about a minute.</p>
       )}
     </div>
   )

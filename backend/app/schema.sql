@@ -67,6 +67,11 @@ ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS model TEXT;
 ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS cache_read_tokens INT NOT NULL DEFAULT 0;
 ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS cache_write_tokens INT NOT NULL DEFAULT 0;
 
--- Embedding progress, for the progress bar while a repo is being indexed.
-ALTER TABLE repos ADD COLUMN IF NOT EXISTS embedded_count INT NOT NULL DEFAULT 0;
-ALTER TABLE repos ADD COLUMN IF NOT EXISTS embedding_started_at TIMESTAMPTZ;
+-- Progress of the current indexing phase (cloning, parsing, embedding), for the UI.
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS progress_done INT NOT NULL DEFAULT 0;
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS progress_total INT;
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS progress_detail TEXT;
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS phase_started_at TIMESTAMPTZ;
+-- Superseded by the generic columns above (embedding-only, from an earlier version).
+ALTER TABLE repos DROP COLUMN IF EXISTS embedded_count;
+ALTER TABLE repos DROP COLUMN IF EXISTS embedding_started_at;

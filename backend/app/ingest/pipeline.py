@@ -3,54 +3,89 @@
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 from app.config import Settings
 from app.embeddings import Embedder
 from app.ingest.chunker import chunk_file, embedding_text, search_text
-from app.ingest.source import iter_source_files, shallow_clone
+from app.ingest.source import candidate_paths, read_source, shallow_clone
+from app.models import Chunk, SourceFile
 from app.observability import log
 from app.store import RepoStore
 
 
+class ProgressReporter:
+    """Writes phase progress to the repo row, at most every `min_interval_s` seconds.
+
+    Git and the parser can report hundreds of updates a second; the UI polls every 1.5 s,
+    so throttling keeps database writes (possibly to a hosted DB) to a couple per second.
+    """
+
+    def __init__(self, store: RepoStore, repo_id: int, min_interval_s: float = 0.5) -> None:
+        self.store = store
+        self.repo_id = repo_id
+        self.min_interval_s = min_interval_s
+        self._last_write = float("-inf")
+        self._last_value: tuple[int, int | None, str | None] | None = None
+
+    def start_phase(self, status: str, total: int | None, **fields: Any) -> None:
+        """Enter a new phase: resets progress in the DB and forgets what was last written."""
+        self.store.start_phase(self.repo_id, status, total, **fields)
+        self._last_write, self._last_value = float("-inf"), None
+
+    def report(self, done: int, total: int | None, detail: str | None = None, force: bool = False) -> None:
+        value = (done, total, detail)
+        now = time.monotonic()
+        if value == self._last_value or (not force and now - self._last_write < self.min_interval_s):
+            return
+        self.store.set_progress(self.repo_id, done, total, detail)
+        self._last_write, self._last_value = now, value
+
+
 class IngestionPipeline:
-    def __init__(self, store: RepoStore, embedder: Embedder, settings: Settings, embed_batch_size: int = 128) -> None:
+    def __init__(
+        self,
+        store: RepoStore,
+        embedder: Embedder,
+        settings: Settings,
+        embed_batch_size: int = 128,
+        progress_interval_s: float = 0.5,
+    ) -> None:
         self.store = store
         self.embedder = embedder
         self.settings = settings
-        # Progress is written after each batch: frequent enough for a smooth bar (a batch
-        # takes ~1-3 s on CPU), rare enough not to load a hosted database.
-        self.embed_batch_size = embed_batch_size
-
-    def _embed_with_progress(self, repo_id: int, texts: list[str]) -> list[np.ndarray]:
-        embeddings: list[np.ndarray] = []
-        for start in range(0, len(texts), self.embed_batch_size):
-            embeddings.extend(self.embedder.embed_documents(texts[start : start + self.embed_batch_size]))
-            self.store.set_embedding_progress(repo_id, len(embeddings))
-        return embeddings
+        self.embed_batch_size = embed_batch_size  # a batch takes ~1-3 s on CPU
+        self.progress_interval_s = progress_interval_s
 
     def run(self, repo_id: int, url: str, local_path: Path | None = None) -> None:
         """Index a repo. `local_path` skips the clone (used by tests and evals)."""
         started = time.perf_counter()
         bound = log.bind(repo_id=repo_id, url=url)
+        progress = ProgressReporter(self.store, repo_id, self.progress_interval_s)
         try:
             with tempfile.TemporaryDirectory(prefix="askrepo-") as tmp:
                 root = local_path or Path(tmp) / "repo"
                 commit = None
                 if local_path is None:
-                    self.store.set_status(repo_id, "cloning")
-                    commit = shallow_clone(url, root, self.settings.clone_timeout_s)
+                    progress.start_phase("cloning", total=100)  # git reports a percentage
+                    commit = shallow_clone(
+                        url,
+                        root,
+                        self.settings.clone_timeout_s,
+                        on_progress=lambda pct, detail: progress.report(pct, 100, detail),
+                    )
+                    progress.report(100, 100, "Cloned", force=True)
 
-                self.store.set_status(repo_id, "parsing")
-                files = list(iter_source_files(root, self.settings.max_files, self.settings.max_file_bytes))
-                chunks = [chunk for f in files for chunk in chunk_file(f)]
+                files, chunks = self._parse(root, progress)
                 if not chunks:
                     raise ValueError("No indexable files found (Python, Markdown or config)")
 
-                self.store.start_embedding(repo_id, file_count=len(files), chunk_count=len(chunks))
-                embeddings = self._embed_with_progress(repo_id, [embedding_text(c) for c in chunks])
+                progress.start_phase("embedding", total=len(chunks), file_count=len(files), chunk_count=len(chunks))
+                embeddings = self._embed([embedding_text(c) for c in chunks], progress)
 
+                progress.report(len(chunks), len(chunks), "Saving to database", force=True)
                 self.store.replace_contents(repo_id, files, chunks, [search_text(c) for c in chunks], embeddings)
                 self.store.set_status(repo_id, "ready", commit_sha=commit)
                 bound.info(
@@ -62,6 +97,27 @@ class IngestionPipeline:
         except Exception as exc:  # report any failure on the repo row, never crash the worker
             bound.exception("ingest.failed")
             self.store.set_status(repo_id, "failed", error=_friendly_error(exc))
+
+    def _parse(self, root: Path, progress: ProgressReporter) -> tuple[list[SourceFile], list[Chunk]]:
+        paths = candidate_paths(root, self.settings.max_files, self.settings.max_file_bytes)
+        progress.start_phase("parsing", total=len(paths))
+        files: list[SourceFile] = []
+        chunks: list[Chunk] = []
+        for done, (path, rel) in enumerate(paths, start=1):
+            if source := read_source(path, rel):
+                files.append(source)
+                chunks.extend(chunk_file(source))
+            progress.report(done, len(paths), rel)
+        progress.report(len(paths), len(paths), None, force=True)
+        return files, chunks
+
+    def _embed(self, texts: list[str], progress: ProgressReporter) -> list[np.ndarray]:
+        embeddings: list[np.ndarray] = []
+        for start in range(0, len(texts), self.embed_batch_size):
+            embeddings.extend(self.embedder.embed_documents(texts[start : start + self.embed_batch_size]))
+            # Force every batch: batches are already seconds apart, and each one moves the bar.
+            progress.report(len(embeddings), len(texts), force=True)
+        return embeddings
 
 
 def _friendly_error(exc: Exception) -> str:

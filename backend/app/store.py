@@ -58,7 +58,8 @@ class RepoStore:
         with self.pool.connection() as conn:
             row = conn.execute(
                 """INSERT INTO repos (url, name, status) VALUES (%s, %s, 'pending')
-                   ON CONFLICT (url) DO UPDATE SET status = 'pending', error = NULL
+                   ON CONFLICT (url) DO UPDATE SET status = 'pending', error = NULL,
+                       progress_done = 0, progress_total = NULL, progress_detail = NULL
                    RETURNING id""",
                 (url, name),
             ).fetchone()
@@ -75,19 +76,25 @@ class RepoStore:
                 {"status": status, "error": error, "id": repo_id, **fields},
             )
 
-    def start_embedding(self, repo_id: int, file_count: int, chunk_count: int) -> None:
-        """Enter the embedding phase; the start time uses the DB clock, like the elapsed time."""
+    def start_phase(self, repo_id: int, status: str, total: int | None, **fields: Any) -> None:
+        """Enter an indexing phase and reset its progress. The start time uses the DB clock,
+        like the elapsed time reported by list_repos, so clock skew can't distort estimates."""
+        sets = ", ".join(f"{k} = %({k})s" for k in fields)  # keys are code-defined, not user input
         with self.pool.connection() as conn:
             conn.execute(
-                """UPDATE repos SET status = 'embedding', error = NULL, file_count = %s, chunk_count = %s,
-                                    embedded_count = 0, embedding_started_at = now()
-                   WHERE id = %s""",
-                (file_count, chunk_count, repo_id),
+                f"""UPDATE repos SET status = %(status)s, error = NULL, progress_done = 0,
+                                     progress_total = %(total)s, progress_detail = NULL,
+                                     phase_started_at = now(){", " + sets if sets else ""}
+                    WHERE id = %(id)s""",
+                {"status": status, "total": total, "id": repo_id, **fields},
             )
 
-    def set_embedding_progress(self, repo_id: int, embedded: int) -> None:
+    def set_progress(self, repo_id: int, done: int, total: int | None, detail: str | None = None) -> None:
         with self.pool.connection() as conn:
-            conn.execute("UPDATE repos SET embedded_count = %s WHERE id = %s", (embedded, repo_id))
+            conn.execute(
+                "UPDATE repos SET progress_done = %s, progress_total = %s, progress_detail = %s WHERE id = %s",
+                (done, total, detail, repo_id),
+            )
 
     def fail_interrupted(self) -> int:
         """Ingestion runs in-process, so any repo still 'busy' at startup was interrupted."""
@@ -98,11 +105,11 @@ class RepoStore:
             )
             return cur.rowcount
 
-    # Elapsed embedding time is computed by the database, so a client or app server whose
+    # Elapsed phase time is computed by the database, so a client or app server whose
     # clock differs from a hosted database's still gets a correct time-remaining estimate.
-    _REPO_COLUMNS = """*, CASE WHEN status = 'embedding' AND embedding_started_at IS NOT NULL
-                       THEN round(extract(epoch FROM now() - embedding_started_at)::numeric, 1)::float
-                  END AS embedding_elapsed_s"""
+    _REPO_COLUMNS = """*, CASE WHEN status IN ('cloning', 'parsing', 'embedding') AND phase_started_at IS NOT NULL
+                       THEN round(extract(epoch FROM now() - phase_started_at)::numeric, 1)::float
+                  END AS phase_elapsed_s"""
 
     def list_repos(self) -> list[dict[str, Any]]:
         with self.pool.connection() as conn:
