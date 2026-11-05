@@ -8,10 +8,12 @@ model actually read.
 
 ## Quick start
 
-Requires Docker and an [Anthropic API key](https://console.anthropic.com/).
+Requires Docker and one of: an [Anthropic API key](https://console.anthropic.com/),
+a [Gemini API key](https://aistudio.google.com/apikey), or [Ollama](https://ollama.com)
+running locally. See [LLM providers](#llm-providers).
 
 ```bash
-cp .env.example .env        # then set ANTHROPIC_API_KEY
+cp .env.example .env        # set LLM_PROVIDER and that provider's key
 docker compose up --build   # first build downloads the embedding model (~130 MB)
 ```
 
@@ -44,6 +46,106 @@ Backend: Python 3.12 with [uv](https://docs.astral.sh/uv/). Frontend: Node 22.
    was the model actually shown those lines? Unverified citations are flagged amber.
    Clicking a citation opens the source with the lines highlighted.
 
+## LLM providers
+
+Pick one with `LLM_PROVIDER` in `.env`. Indexing and search are the same for all three;
+only the model that reads the evidence and writes the answer changes.
+
+| | Claude (default) | Gemini | Ollama (local) |
+|---|---|---|---|
+| `LLM_PROVIDER` | `anthropic` | `gemini` | `ollama` |
+| Credentials | `ANTHROPIC_API_KEY` | `GEMINI_API_KEY` | none |
+| Default `LLM_MODEL` | `claude-opus-5-5` | `gemini-2.5-flash` | `qwen3:8b` |
+| Streaming, tool use | yes | yes | yes (model must support tools) |
+| Prompt caching | explicit breakpoints (see below) | implicit, automatic | n/a (local) |
+| Reasoning | adaptive thinking; `LLM_EFFORT` = low / medium / high | model default thinking | model default |
+| Safety refusal | automatic fallback to another Claude model, else an error shown | error shown | n/a |
+| Cost | see [Cost](#cost-and-caching) | see below | free (your hardware) |
+
+**Claude**: set `ANTHROPIC_API_KEY`. `LLM_MODEL=claude-sonnet-5-5` is about half the cost of Opus.
+
+**Gemini**: set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY`. Google renames and retires
+models often; set `LLM_MODEL` to any current Gemini model id with function calling.
+If it isn't in the price table, add `PRICE_*` variables or the cost shows as "n/a".
+
+**Ollama**: install Ollama, then:
+
+```bash
+ollama pull qwen3:8b       # or llama3.1, mistral-small, … any model tagged "tools"
+ollama serve               # if it isn't already running
+```
+
+Set `LLM_PROVIDER=ollama`. In Docker the app reaches Ollama on your machine through
+`host.docker.internal:11434`. Outside Docker set `OLLAMA_BASE_URL=http://localhost:11434`.
+`OLLAMA_NUM_CTX` (default 32768) is sent with every request, because Ollama's default
+context window is too small for the system prompt plus tool results. Expect weaker
+answers than the hosted models: small models call tools less reliably, so **Quick**
+mode often works better locally.
+
+The adapters live in `backend/app/agent/llm/`, one file per provider (about 100 lines
+each) behind provider-neutral message types. The agent loop, tools, prompts and
+citation checks are shared. Adapters are used instead of a compatibility layer so
+each provider keeps what makes it work well: Claude's thinking blocks and cache
+breakpoints, Gemini's thought signatures between tool calls, Ollama's context size.
+All three are tested offline against canned responses (`tests/test_providers.py`).
+
+## Cost and caching
+
+Every answer's footer shows tokens in and out, the share read from cache, the cost, and
+the model that answered. Every question is also logged in `query_logs`.
+
+**Estimated cost per question on Claude Opus 5.5** ($4 input / $20 output per million tokens,
+cache reads $0.20, cache writes $5):
+
+| Mode | Model calls | Estimate |
+|---|---|---|
+| Quick | 1 | ~$0.03–0.05 |
+| Deep, before history caching | 3–4 | ~$0.13–0.16 |
+| Deep, with history caching | 3–4 | **~$0.10–0.12** |
+
+Indexing and the retrieval eval cost nothing (embeddings run on CPU). The answer eval
+(`make eval-answers`, 22 questions, deep) is roughly $2.50–3. Sonnet 5.5 halves all of
+these; Ollama is free.
+
+**How history caching works.** In deep mode each agent step resends the whole
+conversation so far: system prompt, tools, question, and every earlier tool call and
+result. Claude's prompt cache is prefix-based, so the adapter marks two cache breakpoints:
+
+1. **System prompt + tool definitions**: identical for every question on a repo.
+2. **The end of the conversation**: on the newest tool result, in deep mode only.
+
+The next step then reads everything before its new tool results from cache at 5% of
+the input price, and pays the 1.25× write rate only for what that step added.
+
+Worked example for a typical 4-step answer with ~4k tokens of tool output per step
+(system prompt already cached from an earlier question):
+
+| | Uncached input | Cache read | Cache write | Input cost |
+|---|---|---|---|---|
+| Before | ~24k tokens × $4 | ~12k × $0.20 | ~0 | ~$0.10 |
+| After | ~0.1k × $4 | ~24k × $0.20 | ~12k × $5 | ~$0.065 |
+
+That cuts input cost by about a third. Output (~1.5–3k tokens, ~$0.03–0.06) is
+unchanged, so the whole question costs about 25% less. Quick mode deliberately does not
+cache its conversation: it makes one call, so a cache write would be a 25% surcharge that
+is never read back.
+
+These are estimates from token counts. To see real numbers:
+
+```bash
+docker compose exec db psql -U askrepo -c "
+  select provider, model, mode, count(*) as questions,
+         round(avg(cost_usd), 4) as avg_cost,
+         round(100.0 * sum(cache_read_tokens)
+               / nullif(sum(input_tokens + cache_read_tokens + cache_write_tokens), 0)) as pct_cached
+  from query_logs where error is null
+  group by 1, 2, 3 order by 1, 2, 3;"
+```
+
+In a healthy deep-mode run `pct_cached` should be well above 50%. If it is near zero,
+caching is not taking effect. In `query_logs`, `input_tokens` counts **uncached** input
+only; cached tokens are in their own columns.
+
 ## Architecture
 
 ```mermaid
@@ -53,7 +155,7 @@ flowchart LR
     ING --> PG[("Postgres<br/>pgvector + full-text<br/>files · chunks · query_logs")]
     API --> QA["QuestionAnswerer<br/>quick | deep"]
     QA -- "tools: search_code · grep<br/>read_file · list_files" --> PG
-    QA -- "streaming, tool use" --> LLM["Claude API"]
+    QA -- "streaming, tool use" --> LLM["LLM adapter<br/>Claude · Gemini · Ollama"]
     QA --> CIT["Citation checker<br/>valid · grounded"]
 ```
 
@@ -61,7 +163,8 @@ flowchart LR
 |------|----------------|
 | `backend/app/ingest/` | `source.py` (URL validation, clone, file filter), `chunker.py` (AST chunking), `pipeline.py` |
 | `backend/app/store.py` | All SQL: vector, keyword, hybrid (RRF), grep, file access, query logs |
-| `backend/app/agent/` | `runner.py` (both modes), `tools.py`, `prompts.py`, `llm.py` (SDK wrapper), `citations.py` |
+| `backend/app/agent/` | `runner.py` (both modes), `tools.py`, `prompts.py`, `citations.py` |
+| `backend/app/agent/llm/` | `base.py` (neutral types), one adapter per provider, `pricing.py` |
 | `backend/app/api.py` | HTTP routes; answers stream as server-sent events |
 | `backend/evals/` | Pinned Starlette eval set, retrieval eval, answer eval |
 | `frontend/src/` | `App.tsx`, `components/`, `api.ts` (the only module that calls the backend) |
@@ -73,7 +176,7 @@ commit, in five categories: concept, lookup, location, dependencies, and negativ
 (not answerable from the repo).
 
 - `make eval`: **retrieval**. hit@5 and MRR for vector, keyword and hybrid search. No API key.
-- `make eval-answers`: **answers**. Runs the real agent and scores whether answers cite an
+- `make eval-answers`: **answers**. Runs the real agent on the configured provider and scores whether answers cite an
   expected file, citation validity and grounding, declines on negative questions,
   steps, latency and cost.
 
