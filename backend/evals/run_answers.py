@@ -1,6 +1,6 @@
 """Answer eval: run the real agent on every question and score the answers.
 
-Needs ANTHROPIC_API_KEY and costs real money (roughly $0.03-0.10 per question
+Needs ANTHROPIC_API_KEY and costs real money (estimated ~$0.10-0.20 per question
 in deep mode at current Opus 5.5 prices; check the printed total).
 
 Scored automatically, no LLM judge:
