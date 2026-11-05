@@ -58,11 +58,11 @@ class Settings(BaseSettings):
     def llm_problem(self) -> str | None:
         """Why the configured LLM can't be used, or None if it looks ready."""
         if self.llm_provider == "anthropic" and not self.anthropic_api_key:
-            return "ANTHROPIC_API_KEY is not set"
+            return "Claude isn't connected: add ANTHROPIC_API_KEY to .env"
         if self.llm_provider == "gemini" and not self.gemini_api_key:
-            return "GEMINI_API_KEY is not set"
+            return "Gemini isn't connected: add GEMINI_API_KEY to .env"
         if self.llm_provider not in ("anthropic", "gemini", "ollama"):
-            return f"Unknown LLM_PROVIDER: {self.llm_provider}"
+            return f"Unknown LLM_PROVIDER '{self.llm_provider}': use anthropic, gemini or ollama"
         return None
 
 

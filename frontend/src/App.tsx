@@ -9,11 +9,18 @@ import { phaseProgress } from './progress'
 
 const PROVIDER_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', ollama: 'Ollama' }
 
+// Names for the setup steps, shared with the sidebar's status line.
+export const STEP_LABEL: Partial<Record<Repo['status'], string>> = {
+  cloning: 'Download',
+  parsing: 'Read files',
+  embedding: 'Make searchable',
+}
+
 const SUGGESTIONS = [
-  'Give me a tour of this codebase: the main modules and how they fit together.',
-  'How is an incoming HTTP request routed to a handler?',
-  'What are the runtime dependencies?',
-  'Where is error handling implemented, and how does it work?',
+  'What does this project do, and what are its main parts?',
+  'How do I install it and start using it?',
+  'What other software does it depend on?',
+  'How does it handle errors?',
 ]
 
 export default function App() {
@@ -105,7 +112,7 @@ export default function App() {
       <header className="flex items-center gap-3 border-b border-stone-200 bg-white px-4 py-2.5 dark:border-stone-800 dark:bg-stone-900">
         <img src="/favicon.svg" alt="" className="size-6" />
         <h1 className="text-sm font-semibold tracking-tight">Ask Repo</h1>
-        <span className="hidden text-xs text-stone-500 sm:inline">Answers about any codebase, with receipts.</span>
+        <span className="hidden text-xs text-stone-500 sm:inline">Ask questions about any GitHub project. Answers point to the exact code.</span>
         <div className="ml-auto flex items-center gap-2 text-xs text-stone-500">
           {config && (
             <span className="hidden items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 sm:flex dark:bg-stone-800">
@@ -173,7 +180,7 @@ function Composer(props: { mode: Mode; onMode: (m: Mode) => void; streaming: boo
             }}
             rows={1}
             maxLength={2000}
-            placeholder="Ask how something works, where it lives, or what it depends on…"
+            placeholder="Ask how something works or where to find it…"
             className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none field-sizing-content"
             aria-label="Question"
           />
@@ -188,8 +195,8 @@ function Composer(props: { mode: Mode; onMode: (m: Mode) => void; streaming: boo
           )}
         </div>
         <div className="mt-2 flex items-center gap-1 text-xs">
-          <ModeButton active={props.mode === 'deep'} onClick={() => props.onMode('deep')} icon={<Layers className="size-3.5" />} label="Deep" hint="Agent searches, greps and reads files until it has evidence" />
-          <ModeButton active={props.mode === 'quick'} onClick={() => props.onMode('quick')} icon={<Zap className="size-3.5" />} label="Quick" hint="One retrieval, one answer: faster and cheaper" />
+          <ModeButton active={props.mode === 'deep'} onClick={() => props.onMode('deep')} icon={<Layers className="size-3.5" />} label="Thorough" hint="Looks through the code step by step before answering. Best for “how does it work” questions." />
+          <ModeButton active={props.mode === 'quick'} onClick={() => props.onMode('quick')} icon={<Zap className="size-3.5" />} label="Quick" hint="Answers in one go from the most relevant code. Faster and cheaper, best for simple questions." />
           <span className="ml-auto hidden text-stone-400 sm:inline">Enter to send · Shift+Enter for a new line</span>
         </div>
       </div>
@@ -217,8 +224,10 @@ function Welcome({ repo, onAsk }: { repo: Repo; onAsk: (q: string) => void }) {
     <div className="pt-8 text-center">
       <h2 className="text-xl font-semibold tracking-tight">Ask anything about {repo.name}</h2>
       <p className="mt-1 text-sm text-stone-500">
-        {repo.file_count} files and {repo.chunk_count.toLocaleString()} chunks indexed
-        {repo.commit_sha && <> at <code className="font-mono">{repo.commit_sha.slice(0, 7)}</code></>}. Every claim links back to the source.
+        <span title={repo.commit_sha ? `Version ${repo.commit_sha.slice(0, 7)} · ${repo.chunk_count.toLocaleString()} searchable sections` : undefined}>
+          {repo.file_count.toLocaleString()} files read
+        </span>
+        . Every answer links to the lines of code it's based on, so you can check it.
       </p>
       <div className="mx-auto mt-6 grid max-w-2xl gap-2 text-left sm:grid-cols-2">
         {SUGGESTIONS.map((s) => (
@@ -233,7 +242,7 @@ function Welcome({ repo, onAsk }: { repo: Repo; onAsk: (q: string) => void }) {
 
 function IndexingState({ repo }: { repo: Repo }) {
   if (repo.status === 'failed') {
-    return <p className="pt-16 text-center text-sm text-red-600">Indexing failed: {repo.error}</p>
+    return <p className="pt-16 text-center text-sm text-red-600">Couldn't add this project. {repo.error}</p>
   }
   const steps: Repo['status'][] = ['cloning', 'parsing', 'embedding']
   const current = steps.indexOf(repo.status)
@@ -241,19 +250,19 @@ function IndexingState({ repo }: { repo: Repo }) {
   return (
     <div className="pt-16 text-center">
       <Loader2 className="mx-auto size-6 animate-spin text-indigo-500" />
-      <h2 className="mt-3 font-semibold">Indexing {repo.name}</h2>
+      <h2 className="mt-3 font-semibold">Getting {repo.name} ready</h2>
       <ol className="mx-auto mt-4 flex max-w-sm justify-center gap-4 text-xs">
         {steps.map((s, i) => (
           <li key={s} className={i < current ? 'text-emerald-600' : i === current ? 'font-medium text-indigo-600' : 'text-stone-400'}>
-            {i < current ? '✓' : `${i + 1}.`} {s}
+            {i < current ? '✓' : `${i + 1}.`} {STEP_LABEL[s]}
           </li>
         ))}
       </ol>
       <div className="mx-auto mt-5 max-w-sm">
-        <ProgressBar percent={progress?.percent ?? 0} label={`Indexing ${repo.name}: ${repo.status}`} />
+        <ProgressBar percent={progress?.percent ?? 0} label={`Getting ${repo.name} ready: ${STEP_LABEL[repo.status] ?? 'starting'}`} />
         <p className="mt-2 flex justify-between gap-3 text-xs text-stone-500 tabular-nums">
           <span className="shrink-0">
-            {progress ? `${progress.percent}% · ${progress.summary}` : 'Queued…'}
+            {progress ? `${progress.percent}% · ${progress.summary}` : 'Starting…'}
           </span>
           <span className="min-w-0 truncate font-mono text-[11px]" title={progress?.aside}>
             {progress?.aside}
@@ -261,7 +270,7 @@ function IndexingState({ repo }: { repo: Repo }) {
         </p>
       </div>
       {repo.status === 'embedding' && (
-        <p className="mt-4 text-xs text-stone-400">Embedding runs on CPU; a mid-sized repo takes about a minute.</p>
+        <p className="mt-4 text-xs text-stone-400">This is the longest step: about a minute for a typical project.</p>
       )}
     </div>
   )
@@ -271,8 +280,8 @@ function EmptyState() {
   return (
     <div className="pt-20 text-center">
       <Gauge className="mx-auto size-8 text-stone-300" />
-      <h2 className="mt-3 text-lg font-semibold">Index a repository to begin</h2>
-      <p className="mt-1 text-sm text-stone-500">Paste a public GitHub URL in the sidebar.</p>
+      <h2 className="mt-3 text-lg font-semibold">Add a GitHub project to get started</h2>
+      <p className="mt-1 text-sm text-stone-500">Paste the link to a public project in the “Add a project” box, or try the example.</p>
     </div>
   )
 }

@@ -14,15 +14,15 @@ from tests.conftest import FIXTURE_REPO
 REAL_GIT_LINES = [
     ("Cloning into 'starlette'...", None),
     ("remote: Enumerating objects: 166, done.        ", None),
-    ("remote: Counting objects:   0% (1/166)        ", (0, "Preparing on GitHub")),
-    ("remote: Compressing objects: 100% (156/156), done.        ", (5, "Preparing on GitHub")),
+    ("remote: Counting objects:   0% (1/166)        ", (0, "Waiting for GitHub")),
+    ("remote: Compressing objects: 100% (156/156), done.        ", (5, "Waiting for GitHub")),
     ("Receiving objects:   0% (1/166)", (5, "Downloading")),
     ("remote: Total 166 (delta 6), reused 63 (delta 1), pack-reused 0 (from 0)        ", None),
     ("Receiving objects:  99% (165/166)", (84, "Downloading")),
-    ("Receiving objects: 100% (166/166), 2.67 MiB | 16.75 MiB/s, done.", (85, "Downloading · 2.67 MiB")),
-    ("Resolving deltas:   0% (0/6)", (85, "Resolving deltas")),
-    ("Resolving deltas: 100% (6/6), done.", (95, "Resolving deltas")),
-    ("Updating files:  50% (60/120)", (97, "Checking out files")),
+    ("Receiving objects: 100% (166/166), 2.67 MiB | 16.75 MiB/s, done.", (85, "Downloading · 2.8 MB")),
+    ("Resolving deltas:   0% (0/6)", (85, "Unpacking")),
+    ("Resolving deltas: 100% (6/6), done.", (95, "Unpacking")),
+    ("Updating files:  50% (60/120)", (97, "Unpacking files")),
 ]
 
 
@@ -63,11 +63,11 @@ def test_clone_streams_progress_including_in_place_updates(fake_git, tmp_path):
     sha = shallow_clone("https://github.com/x/y", tmp_path / "out", 10, on_progress=lambda p, d: seen.append((p, d)))
     assert sha == "0123456789abcdef"
     assert seen == [
-        (1, "Preparing on GitHub"),  # \r-separated update, not lost
-        (3, "Preparing on GitHub"),
+        (1, "Waiting for GitHub"),  # \r-separated update, not lost
+        (3, "Waiting for GitHub"),
         (37, "Downloading"),
-        (85, "Downloading · 2.50 MiB"),
-        (95, "Resolving deltas"),  # last line has no trailing newline
+        (85, "Downloading · 2.6 MB"),
+        (95, "Unpacking"),  # last line has no trailing newline
     ]
     assert (tmp_path / "out" / "shop" / "pricing.py").exists()
 
@@ -152,9 +152,9 @@ def test_every_phase_reports_progress_from_start_to_finish(store, embedder, sett
     assert repo["status"] == "ready" and repo["commit_sha"] == "0123456789abcdef"
 
     cloning, parsing, embedding = phase(snaps, "cloning"), phase(snaps, "parsing"), phase(snaps, "embedding")
-    assert [s[1] for s in cloning][-1] == 100 and cloning[-1][3] == "Cloned"
+    assert [s[1] for s in cloning][-1] == 100 and cloning[-1][3] == "Downloaded"
     assert {s[2] for s in cloning} == {100}
-    assert any(s[3] == "Downloading · 2.50 MiB" for s in cloning)
+    assert any(s[3] == "Downloading · 2.6 MB" for s in cloning)
 
     files = [s for s in parsing if s[3]]  # per-file updates carry the path being parsed
     assert parsing[-1][1] == parsing[-1][2] == 4  # README + 3 Python files; .env is never indexed
@@ -162,7 +162,7 @@ def test_every_phase_reports_progress_from_start_to_finish(store, embedder, sett
 
     counts = [s[1] for s in embedding]
     assert counts == sorted(counts) and counts[-1] == repo["chunk_count"] == embedding[0][2]
-    assert embedding[-1][3] == "Saving to database"
+    assert embedding[-1][3] == "Saving"
 
     for status in ("cloning", "parsing", "embedding"):  # elapsed time only while busy
         assert all(s[4] is not None and s[4] >= 0 for s in phase(snaps, status))

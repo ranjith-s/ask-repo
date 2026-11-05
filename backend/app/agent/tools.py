@@ -120,11 +120,11 @@ class RepoTools:
     async def run(self, name: str, args: dict[str, Any]) -> ToolOutcome:
         handler = getattr(self, f"_tool_{name}", None)
         if handler is None:
-            return ToolOutcome(f"Unknown tool: {name}", f"unknown tool {name}", is_error=True)
+            return ToolOutcome(f"Unknown tool: {name}", f"Tried an unknown action ({name})", is_error=True)
         try:
             outcome: ToolOutcome = await asyncio.to_thread(handler, **args)
         except (TypeError, ValueError) as exc:
-            return ToolOutcome(f"Invalid arguments: {exc}", f"{name}: invalid arguments", is_error=True)
+            return ToolOutcome(f"Invalid arguments: {exc}", "A step failed because of invalid input", is_error=True)
         if len(outcome.content) > self.max_chars:
             outcome.content = outcome.content[: self.max_chars] + "\n…[truncated; narrow the request]"
         return outcome
@@ -133,13 +133,15 @@ class RepoTools:
     def _tool_search_code(self, query: str) -> ToolOutcome:
         hits = self.search(query, shown_lines=SNIPPET_LINES)
         if not hits:
-            return ToolOutcome("No results.", f'search "{query}" → 0 results')
+            return ToolOutcome("No results.", f'Searched for "{query}": nothing found')
         blocks = []
         for h in hits:
             snippet = "\n".join(h.content.splitlines()[:SNIPPET_LINES])
             blocks.append(f"## {h.path}:L{h.start_line}-L{h.end_line} ({h.kind} {h.symbol})\n{snippet}")
         locations = [{"path": h.path, "start": h.start_line, "end": h.end_line} for h in hits]
-        return ToolOutcome("\n\n".join(blocks), f'search "{query}" → {len(hits)} results', locations=locations)
+        return ToolOutcome(
+            "\n\n".join(blocks), f'Searched for "{query}": {_count(len(hits), "place")}', locations=locations
+        )
 
     def _tool_grep(self, pattern: str, path_prefix: str = "") -> ToolOutcome:
         if len(pattern) < 2 or len(pattern) > 200:
@@ -148,31 +150,42 @@ class RepoTools:
         for path, line, _ in matches:
             self.seen.add(path, line, line)
         body = "\n".join(f"{p}:L{n}: {text}" for p, n, text in matches) or "No matches."
-        return ToolOutcome(body, f'grep "{pattern}" → {len(matches)} matches')
+        return ToolOutcome(body, f'Looked for the exact text "{pattern}": {_count(len(matches), "match", "matches")}')
 
     def _tool_read_file(self, path: str, start_line: int, end_line: int) -> ToolOutcome:
         content = self.store.get_file(self.repo_id, path)
         if content is None:
             return ToolOutcome(
-                f"File not found: {path}. Use list_files to see valid paths.", f"read {path} (not found)", is_error=True
+                f"File not found: {path}. Use list_files to see valid paths.",
+                f"Tried to open {path}: no such file",
+                is_error=True,
             )
         lines = content.splitlines()
         if start_line > len(lines):
-            return ToolOutcome(f"{path} has only {len(lines)} lines.", f"read {path} (out of range)", is_error=True)
+            return ToolOutcome(
+                f"{path} has only {len(lines)} lines.", f"Tried to read past the end of {path}", is_error=True
+            )
         start = max(1, start_line)
         end = min(len(lines), max(start, end_line), start + READ_FILE_MAX_LINES - 1)
         self.seen.add(path, start, end)
         body = "\n".join(f"{n:>5}  {lines[n - 1]}" for n in range(start, end + 1))
         note = f"\n[file has {len(lines)} lines]" if end < len(lines) else ""
         return ToolOutcome(
-            body + note, f"read {path} L{start}-L{end}", locations=[{"path": path, "start": start, "end": end}]
+            body + note, f"Read {path}, lines {start}–{end}", locations=[{"path": path, "start": start, "end": end}]
         )
 
     def _tool_list_files(self, path_prefix: str = "") -> ToolOutcome:
         paths = self.store.list_paths(self.repo_id, path_prefix)
         shown = paths[:LIST_FILES_MAX]
         more = f"\n…and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ""
-        return ToolOutcome("\n".join(shown) + more or "No files.", f"list {path_prefix or '/'} → {len(paths)} files")
+        return ToolOutcome(
+            "\n".join(shown) + more or "No files.",
+            f"Listed the files in {path_prefix or 'the project'}: {_count(len(paths), 'file')}",
+        )
+
+
+def _count(n: int, singular: str, plural: str | None = None) -> str:
+    return f"{n} {singular if n == 1 else (plural or singular + 's')}"
 
 
 def repo_map(paths: list[str], max_lines: int = 60) -> str:

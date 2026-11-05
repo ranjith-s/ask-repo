@@ -18,7 +18,7 @@ cp .env.example .env        # set LLM_PROVIDER and that provider's key
 docker compose up --build   # first build downloads the embedding model (~130 MB)
 ```
 
-Open http://localhost:8000, click **Try it with encode/starlette**, and ask a question
+Open http://localhost:8000, click **Not sure? Try an example project**, and ask a question
 once indexing finishes (about a minute on CPU).
 
 ### Local development
@@ -145,9 +145,9 @@ Things to know:
    progress: download percentage and size while cloning, files parsed (and the current file),
    and chunks embedded with time left.
 2. **Ask** in one of two modes:
-   - **Deep**: an agent with four read-only tools (`search_code`, `grep`, `read_file`,
+   - **Thorough** (`deep` in the API): an agent with four read-only tools (`search_code`, `grep`, `read_file`,
      `list_files`) explores until it has evidence, then answers. The steps stream live.
-   - **Quick**: one hybrid retrieval, one model call. Cheaper and faster.
+   - **Quick** (`quick`): one hybrid retrieval, one model call. Cheaper and faster.
 3. **Verify**: every `[path:Lx-Ly]` citation is checked: does the range exist, and
    was the model actually shown those lines? Unverified citations are flagged amber.
    Clicking a citation opens the source with the lines highlighted.
@@ -197,8 +197,9 @@ All three are tested offline against canned responses (`tests/test_providers.py`
 
 ## Cost and caching
 
-Every answer's footer shows tokens in and out, the share read from cache, the cost, and
-the model that answered. Every question is also logged in `query_logs`.
+Every answer's footer shows the approximate cost ("about $0.06"). Hover it for the details:
+tokens sent and generated, the share reused from cache, the exact cost, and the model that
+answered. Every question is also logged in `query_logs`.
 
 **Estimated cost per question on Claude Opus 5.5** ($4 input / $20 output per million tokens,
 cache reads $0.20, cache writes $5):

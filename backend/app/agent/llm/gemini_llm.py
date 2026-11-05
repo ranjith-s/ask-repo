@@ -113,7 +113,7 @@ class GeminiLLM:
             async for chunk in stream:
                 meta = chunk.usage_metadata or meta
                 if chunk.prompt_feedback and chunk.prompt_feedback.block_reason:
-                    raise LLMRefusal("Gemini blocked this request.")
+                    raise LLMRefusal("Gemini declined to answer this question. Try rephrasing it.")
                 if not chunk.candidates:
                     continue
                 candidate = chunk.candidates[0]
@@ -127,11 +127,11 @@ class GeminiLLM:
                 f"Gemini rejected the request ({exc.code}). Check GEMINI_API_KEY and LLM_MODEL."
             ) from exc
         except genai_errors.ServerError as exc:
-            raise LLMUnavailable("Gemini is unavailable right now. Try again shortly.") from exc
+            raise LLMUnavailable("Gemini is unavailable right now. Please try again in a minute.") from exc
 
         finish_name = getattr(finish, "name", None)
         if finish_name in BLOCKED:
-            raise LLMRefusal("Gemini declined to answer this request.")
+            raise LLMRefusal("Gemini declined to answer this question. Try rephrasing it.")
 
         calls = [
             ToolCall(

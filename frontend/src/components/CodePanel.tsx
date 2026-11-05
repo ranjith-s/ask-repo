@@ -63,7 +63,7 @@ export function CodePanel({ repoId, repoUrl, commit, location, onClose }: Props)
         </span>
         {githubLink && (
           <a href={githubLink} target="_blank" rel="noreferrer" className="ml-auto shrink-0 text-xs text-indigo-600 hover:underline dark:text-indigo-400">
-            GitHub ↗
+            Open on GitHub ↗
           </a>
         )}
         <button onClick={onClose} className={`${githubLink ? '' : 'ml-auto'} rounded p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700 dark:hover:bg-stone-800`} aria-label="Close source viewer">

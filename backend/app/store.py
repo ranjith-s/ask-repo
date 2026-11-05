@@ -100,8 +100,9 @@ class RepoStore:
         """Ingestion runs in-process, so any repo still 'busy' at startup was interrupted."""
         with self.pool.connection() as conn:
             cur = conn.execute(
-                """UPDATE repos SET status = 'failed', error = 'Indexing was interrupted; add the repo again.'
-                   WHERE status IN ('pending', 'cloning', 'parsing', 'embedding')"""
+                """UPDATE repos SET status = 'failed', error = %s
+                   WHERE status IN ('pending', 'cloning', 'parsing', 'embedding')""",
+                ("Setup was interrupted because the server restarted. Please add the project again.",),
             )
             return cur.rowcount
 

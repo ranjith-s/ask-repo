@@ -97,14 +97,14 @@ def get_file(repo_id: int, path: str, store: StoreDep) -> dict[str, Any]:
 async def ask(repo_id: int, body: AskRequest, request: Request, store: StoreDep) -> StreamingResponse:
     settings: Settings = request.app.state.settings
     if problem := settings.llm_problem():
-        raise HTTPException(503, f"LLM not configured: {problem}")
+        raise HTTPException(503, f"The AI isn't set up yet: {problem}")
     if len(body.question) > settings.question_max_chars:
-        raise HTTPException(422, f"Question is too long (max {settings.question_max_chars} characters)")
+        raise HTTPException(422, f"Please shorten your question to {settings.question_max_chars} characters or fewer")
     repo = store.get_repo(repo_id)
     if repo is None:
-        raise HTTPException(404, "Repository not found")
+        raise HTTPException(404, "Project not found")
     if repo["status"] != "ready":
-        raise HTTPException(409, f"Repository is not ready (status: {repo['status']})")
+        raise HTTPException(409, "This project is still being set up. Try again in a moment.")
 
     answerer: QuestionAnswerer = request.app.state.answerer
     history = [HistoryTurn(h.question, h.answer) for h in body.history]

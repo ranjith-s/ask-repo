@@ -45,7 +45,7 @@ def parse_github_url(url: str) -> tuple[str, str]:
     """Return (canonical_url, "owner/name") or raise InvalidRepoUrl."""
     match = _GITHUB_URL.match(url.strip())
     if not match:
-        raise InvalidRepoUrl("Only public https://github.com/<owner>/<repo> URLs are supported")
+        raise InvalidRepoUrl("Paste the link to a public GitHub project, like https://github.com/encode/starlette")
     owner, name = match["owner"], match["name"]
     return f"https://github.com/{owner}/{name}", f"{owner}/{name}"
 
@@ -57,11 +57,11 @@ _GIT_PROGRESS = re.compile(
 )
 # Where each git stage sits on the overall 0-100% clone bar. Downloading dominates.
 _CLONE_STAGES = {
-    "Counting objects": (0, 3, "Preparing on GitHub"),
-    "Compressing objects": (3, 5, "Preparing on GitHub"),
+    "Counting objects": (0, 3, "Waiting for GitHub"),
+    "Compressing objects": (3, 5, "Waiting for GitHub"),
     "Receiving objects": (5, 85, "Downloading"),
-    "Resolving deltas": (85, 95, "Resolving deltas"),
-    "Updating files": (95, 100, "Checking out files"),
+    "Resolving deltas": (85, 95, "Unpacking"),
+    "Updating files": (95, 100, "Unpacking files"),
 }
 
 CloneProgress = Callable[[int, str], None]  # (overall percent, human-readable detail)
@@ -74,8 +74,24 @@ def parse_git_progress(line: str) -> tuple[int, str] | None:
         return None
     low, high, label = _CLONE_STAGES[match["phase"]]
     overall = low + (high - low) * min(int(match["pct"]), 100) // 100
-    detail = f"{label} · {match['size']}" if match["size"] else label
+    detail = f"{label} · {_human_size(match['size'])}" if match["size"] else label
     return overall, detail
+
+
+_UNITS = {"": 0, "K": 1, "M": 2, "G": 3}
+
+
+def _human_size(git_size: str) -> str:
+    """Git reports binary units ("2.67 MiB"); show familiar decimal ones ("2.8 MB")."""
+    match = re.match(r"([\d.]+)\s*([KMG]?)i?B", git_size)
+    if not match:
+        return git_size
+    size = float(match[1]) * 1024 ** _UNITS[match[2]]
+    if size >= 1e9:
+        return f"{size / 1e9:.1f} GB"
+    if size >= 1e6:
+        return f"{size / 1e6:.1f} MB"
+    return f"{max(size / 1e3, 0.1):.0f} kB" if size >= 1e3 else f"{size:.0f} bytes"
 
 
 def _lines(stream: IO[bytes]) -> Iterator[str]:

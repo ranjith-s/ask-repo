@@ -5,12 +5,12 @@ import { phaseProgress } from '../progress'
 import { ProgressBar } from './ProgressBar'
 
 const STATUS_LABEL: Record<Repo['status'], string> = {
-  pending: 'Queued',
-  cloning: 'Cloning',
-  parsing: 'Parsing code',
-  embedding: 'Embedding',
+  pending: 'Starting',
+  cloning: 'Downloading',
+  parsing: 'Reading files',
+  embedding: 'Making searchable',
   ready: 'Ready',
-  failed: 'Failed',
+  failed: "Couldn't add",
 }
 
 interface Props {
@@ -48,21 +48,21 @@ export function Sidebar({ repos, selectedId, onSelect, onIndex }: Props) {
         }}
       >
         <label htmlFor="repo-url" className="text-xs font-medium tracking-wide text-stone-500 uppercase">
-          Add a repository
+          Add a project
         </label>
         <div className="mt-2 flex gap-2">
           <input
             id="repo-url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://github.com/owner/repo"
+            placeholder="Paste a GitHub link"
             className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-stone-700 dark:bg-stone-950"
           />
           <button
             type="submit"
             disabled={submitting || !url.trim()}
             className="rounded-md bg-indigo-600 px-2.5 text-white hover:bg-indigo-500 disabled:opacity-40"
-            aria-label="Index repository"
+            aria-label="Add project"
           >
             {submitting ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
           </button>
@@ -74,11 +74,11 @@ export function Sidebar({ repos, selectedId, onSelect, onIndex }: Props) {
             onClick={() => void submit('https://github.com/encode/starlette')}
             className="mt-3 text-xs text-indigo-600 hover:underline dark:text-indigo-400"
           >
-            Try it with encode/starlette →
+            Not sure? Try an example project →
           </button>
         )}
         <p className="mt-3 text-xs leading-relaxed text-stone-500">
-          Public GitHub repos. Python code, Markdown docs and config files are indexed.
+          Works with public GitHub projects. Reads Python code, documentation and settings files.
         </p>
       </form>
 
@@ -107,7 +107,7 @@ export function Sidebar({ repos, selectedId, onSelect, onIndex }: Props) {
                 {progress && <span className="tabular-nums">{progress.percent}%</span>}
                 {repo.status === 'ready' && (
                   <span className="text-stone-400">
-                    · {repo.file_count} files · {repo.chunk_count.toLocaleString()} chunks
+                    · {repo.file_count.toLocaleString()} files
                   </span>
                 )}
               </div>

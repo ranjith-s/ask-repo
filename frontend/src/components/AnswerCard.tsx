@@ -38,7 +38,6 @@ const TOOL_ICON: Record<string, ReactNode> = {
 export function AnswerCard({ turn, onOpen }: { turn: Turn; onOpen: (loc: Location) => void }) {
   const [stepsOpen, setStepsOpen] = useState(false)
   const streaming = turn.status === 'streaming'
-  const totalStepMs = turn.steps.reduce((sum, s) => sum + s.duration_ms, 0)
 
   return (
     <article className="space-y-3">
@@ -57,9 +56,8 @@ export function AnswerCard({ turn, onOpen }: { turn: Turn; onOpen: (loc: Locatio
               aria-expanded={stepsOpen}
             >
               <ChevronRight className={`size-3.5 transition ${stepsOpen ? 'rotate-90' : ''}`} />
-              {streaming && !turn.answer ? 'Exploring' : 'Explored'} the repo: {turn.steps.length}{' '}
-              {turn.steps.length === 1 ? 'step' : 'steps'}
-              <span className="text-stone-400">· {(totalStepMs / 1000).toFixed(1)}s</span>
+              {streaming && !turn.answer ? 'Looking through the code' : 'Looked through the code'}:{' '}
+              {turn.steps.length} {turn.steps.length === 1 ? 'step' : 'steps'}
             </button>
             {(stepsOpen || (streaming && !turn.answer)) && (
               <ol className="mt-2 space-y-1.5 border-l border-stone-200 pl-3 dark:border-stone-800">
@@ -68,12 +66,11 @@ export function AnswerCard({ turn, onOpen }: { turn: Turn; onOpen: (loc: Locatio
                     {step.note && <p className="mb-1 text-stone-500 italic">{step.note}</p>}
                     <div className={`flex items-start gap-1.5 ${step.is_error ? 'text-amber-600' : 'text-stone-600 dark:text-stone-400'}`}>
                       <span className="mt-0.5 text-stone-400">{TOOL_ICON[step.tool] ?? <Search className="size-3.5" />}</span>
-                      <span className="font-mono">{step.summary}</span>
-                      <span className="ml-auto shrink-0 text-stone-400">{step.duration_ms}ms</span>
+                      <span>{step.summary}</span>
                     </div>
                     {step.tool === 'read_file' && step.locations[0] && (
                       <button onClick={() => onOpen(step.locations[0])} className="ml-5 text-indigo-600 hover:underline dark:text-indigo-400">
-                        open
+                        view code
                       </button>
                     )}
                   </li>
@@ -121,10 +118,10 @@ function CitationChip({ loc, citation, onOpen }: { loc: Location; citation?: Cit
   const title = !citation
     ? loc.path
     : !citation.valid
-      ? `${loc.path}: this line range does not exist`
+      ? `${loc.path}: these lines don't exist in the file`
       : !citation.grounded
-        ? `${loc.path}: the model cited lines it was not shown`
-        : `${loc.path}: verified against the lines the model read`
+        ? `${loc.path}: not checked. The AI pointed here without actually reading these lines`
+        : `${loc.path}: checked. The AI read these lines before answering`
   return (
     <button
       onClick={() => citation?.valid !== false && onOpen(loc)}
@@ -149,26 +146,24 @@ function Footer({ turn }: { turn: Turn }) {
   const usage = turn.usage
   return (
     <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-stone-100 pt-3 text-[11px] text-stone-500 dark:border-stone-800">
-      <span className="rounded bg-stone-100 px-1.5 py-0.5 font-medium uppercase dark:bg-stone-800">{turn.mode}</span>
+      <span className="rounded bg-stone-100 px-1.5 py-0.5 font-medium dark:bg-stone-800">{turn.mode === 'deep' ? 'Thorough' : 'Quick'}</span>
       {cites.length > 0 ? (
         <span className={`flex items-center gap-1 ${allGood ? 'text-emerald-600' : 'text-amber-600'}`}>
           {allGood ? <ShieldCheck className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
-          {grounded}/{cites.length} citations verified
+          {grounded} of {cites.length} sources checked
         </span>
       ) : (
-        <span>no citations</span>
+        <span>no sources linked</span>
       )}
-      {turn.latencyMs !== undefined && <span>{(turn.latencyMs / 1000).toFixed(1)}s</span>}
+      {turn.latencyMs !== undefined && <span>{(turn.latencyMs / 1000).toFixed(1)} s</span>}
       {usage && (
         <span
-          title={`uncached input ${usage.input_tokens} · cache read ${usage.cache_read_tokens} · cache write ${usage.cache_write_tokens} · output ${usage.output_tokens}`}
+          className="cursor-help underline decoration-dotted underline-offset-2"
+          title={usageDetail(usage, turn.model)}
         >
-          {totalIn(usage).toLocaleString()} in
-          {usage.cache_read_tokens > 0 && ` (${Math.round((100 * usage.cache_read_tokens) / totalIn(usage))}% cached)`} /{' '}
-          {usage.output_tokens.toLocaleString()} out tokens · {costLabel(usage)}
+          {costLabel(usage)}
         </span>
       )}
-      {turn.model && <span className="text-stone-400">{turn.model}</span>}
     </div>
   )
 }
@@ -178,6 +173,18 @@ function totalIn(u: Usage): number {
 }
 
 function costLabel(u: Usage): string {
-  if (!u.priced) return 'cost n/a'
-  return u.cost_usd === 0 ? 'free' : `$${u.cost_usd.toFixed(4)}`
+  if (!u.priced) return 'cost unknown'
+  if (u.cost_usd === 0) return 'free'
+  return u.cost_usd < 0.01 ? 'under 1¢' : `about $${u.cost_usd.toFixed(2)}`
+}
+
+/** The technical breakdown, kept for the curious in a tooltip. */
+function usageDetail(u: Usage, model?: string): string {
+  const cached = totalIn(u) > 0 ? Math.round((100 * u.cache_read_tokens) / totalIn(u)) : 0
+  const exact = u.priced ? ` · exact cost $${u.cost_usd.toFixed(4)}` : ''
+  return (
+    `Tokens sent: ${totalIn(u).toLocaleString()} (${cached}% reused from cache) · ` +
+    `tokens generated: ${u.output_tokens.toLocaleString()}${exact}` +
+    (model ? ` · answered by ${model}` : '')
+  )
 }

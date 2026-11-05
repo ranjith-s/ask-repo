@@ -5,7 +5,7 @@ export type Phase = 'cloning' | 'parsing' | 'embedding'
 export interface PhaseProgress {
   phase: Phase
   percent: number // 0-100, whole number
-  summary: string // e.g. "Downloading · 2.67 MiB", "12 of 117 files", "1,280 of 2,292 chunks"
+  summary: string // e.g. "Downloading · 2.8 MB", "12 of 117 files", "1,280 of 2,292 sections"
   aside: string // right-hand detail: file being parsed, or time left
 }
 
@@ -20,15 +20,15 @@ export function phaseProgress(repo: Repo): PhaseProgress | null {
   const percent = total > 0 ? Math.floor((100 * done) / total) : 0
 
   if (phase === 'cloning') {
-    // Git reports a percentage (total is 100) and a stage, e.g. "Downloading · 2.67 MiB".
+    // Git reports a percentage (total is 100) and a stage, e.g. "Downloading · 2.8 MB".
     return { phase, percent, summary: repo.progress_detail ?? 'Connecting to GitHub…', aside: '' }
   }
   if (phase === 'parsing') {
     const summary = total > 0 ? `${done.toLocaleString()} of ${total.toLocaleString()} files` : 'Listing files…'
     return { phase, percent, summary, aside: repo.progress_detail ?? '' }
   }
-  const summary = `${done.toLocaleString()} of ${total.toLocaleString()} chunks`
-  // After the last batch the vectors are written to the database; say so instead of "0 s left".
+  const summary = `${done.toLocaleString()} of ${total.toLocaleString()} sections`
+  // After the last batch the results are saved; say so instead of "0 s left".
   const aside = repo.progress_detail ?? formatTimeLeft(secondsLeft(done, total, repo.phase_elapsed_s))
   return { phase, percent, summary, aside }
 }

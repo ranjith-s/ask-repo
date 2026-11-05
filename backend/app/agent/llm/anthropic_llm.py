@@ -106,14 +106,14 @@ class AnthropicLLM:
                         yield TextDelta(event.text)
                 message = await stream.get_final_message()
         except anthropic.AuthenticationError as exc:
-            raise LLMUnavailable("Anthropic rejected the API key. Check ANTHROPIC_API_KEY.") from exc
+            raise LLMUnavailable("Claude rejected the API key. Check ANTHROPIC_API_KEY in .env.") from exc
         except anthropic.RateLimitError as exc:
-            raise LLMUnavailable("Anthropic rate limit reached. Try again shortly.") from exc
+            raise LLMUnavailable("Claude is busy right now (rate limit). Please try again in a minute.") from exc
         except anthropic.APIConnectionError as exc:
-            raise LLMUnavailable("Could not reach the Anthropic API.") from exc
+            raise LLMUnavailable("Couldn't reach Claude. Check your internet connection.") from exc
 
         if message.stop_reason == "refusal":
-            raise LLMRefusal("The model declined to answer this request.")
+            raise LLMRefusal("The AI declined to answer this question. Try rephrasing it.")
         u = message.usage
         yield TurnResult(
             message=AssistantMessage(

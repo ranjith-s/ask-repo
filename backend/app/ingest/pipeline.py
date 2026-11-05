@@ -76,16 +76,16 @@ class IngestionPipeline:
                         self.settings.clone_timeout_s,
                         on_progress=lambda pct, detail: progress.report(pct, 100, detail),
                     )
-                    progress.report(100, 100, "Cloned", force=True)
+                    progress.report(100, 100, "Downloaded", force=True)
 
                 files, chunks = self._parse(root, progress)
                 if not chunks:
-                    raise ValueError("No indexable files found (Python, Markdown or config)")
+                    raise ValueError("This project has no Python code or documentation to read.")
 
                 progress.start_phase("embedding", total=len(chunks), file_count=len(files), chunk_count=len(chunks))
                 embeddings = self._embed([embedding_text(c) for c in chunks], progress)
 
-                progress.report(len(chunks), len(chunks), "Saving to database", force=True)
+                progress.report(len(chunks), len(chunks), "Saving", force=True)
                 self.store.replace_contents(repo_id, files, chunks, [search_text(c) for c in chunks], embeddings)
                 self.store.set_status(repo_id, "ready", commit_sha=commit)
                 bound.info(
@@ -124,7 +124,7 @@ def _friendly_error(exc: Exception) -> str:
     import subprocess
 
     if isinstance(exc, subprocess.TimeoutExpired):
-        return "Clone timed out: the repository may be too large."
+        return "Downloading took too long. The project may be too large."
     if isinstance(exc, subprocess.CalledProcessError):
-        return "Could not clone the repository. Is it public and does it exist?"
+        return "Couldn't download this project. Check the link and that the project is public."
     return str(exc)[:300]

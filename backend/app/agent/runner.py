@@ -98,7 +98,13 @@ class QuestionAnswerer:
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
             log.exception("answer.failed", repo_id=repo["id"])
-            yield {"type": "error", "message": "Something went wrong while answering. Check the server logs."}
+            yield {
+                "type": "error",
+                "message": (
+                    "Something went wrong while answering. Please try again; "
+                    "if it keeps happening, check the server logs."
+                ),
+            }
         finally:
             log.info(
                 "answer.done",
@@ -140,7 +146,7 @@ class QuestionAnswerer:
         yield {
             "type": "step",
             "tool": "search_code",
-            "summary": f"retrieved {len(hits)} chunks",
+            "summary": f"Found the {len(hits)} most relevant parts of the code",
             "duration_ms": _ms(t0),
             "locations": [{"path": h.path, "start": h.start_line, "end": h.end_line} for h in hits],
         }
