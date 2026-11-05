@@ -103,7 +103,8 @@ DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DBNAME?sslmode=require
 
 Then use the normal commands. `make dev` sees that the host is not local, checks it can
 reach it, and does not start anything locally. Docker Compose also uses this URL when it
-is set: run `docker compose up --build app` to start only the app. On startup the app
+is set: run `docker compose up --build --no-deps app` to start only the app (without
+`--no-deps`, Compose also starts its own local database, unused but harmless). On startup the app
 creates the `vector` extension and its tables in that database.
 
 | | Neon | Supabase |
@@ -161,7 +162,7 @@ only the model that reads the evidence and writes the answer changes.
 |---|---|---|---|
 | `LLM_PROVIDER` | `anthropic` | `gemini` | `ollama` |
 | Credentials | `ANTHROPIC_API_KEY` | `GEMINI_API_KEY` | none |
-| Default `LLM_MODEL` | `claude-opus-5-5` | `gemini-2.5-flash` | `qwen3:8b` |
+| Default `LLM_MODEL` | `claude-opus-5-5` | `gemini-3.5-flash` | `qwen3:8b` |
 | Streaming, tool use | yes | yes | yes (model must support tools) |
 | Prompt caching | explicit breakpoints (see below) | implicit, automatic | n/a (local) |
 | Reasoning | adaptive thinking; `LLM_EFFORT` = low / medium / high | model default thinking | model default |
@@ -170,9 +171,14 @@ only the model that reads the evidence and writes the answer changes.
 
 **Claude**: set `ANTHROPIC_API_KEY`. `LLM_MODEL=claude-sonnet-5-5` is about half the cost of Opus.
 
-**Gemini**: set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY`. Google renames and retires
-models often; set `LLM_MODEL` to any current Gemini model id with function calling.
-If it isn't in the price table, add `PRICE_*` variables or the cost shows as "n/a".
+**Gemini**: set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY`. The default model is
+`gemini-3.5-flash`; Google renames and retires models often, so `LLM_MODEL` takes any
+current Gemini model id with function calling. The default's price is not in the built-in
+table (it couldn't be confirmed from Google's pricing page when this was written), so the
+cost shows as "cost unknown" until you add the rates from
+[Google's pricing page](https://ai.google.dev/gemini-api/docs/pricing) to `.env`:
+`PRICE_INPUT_PER_MTOK`, `PRICE_OUTPUT_PER_MTOK` and, for cached input, `PRICE_CACHE_READ_PER_MTOK`
+(all in USD per million tokens).
 
 **Ollama**: install Ollama, then:
 

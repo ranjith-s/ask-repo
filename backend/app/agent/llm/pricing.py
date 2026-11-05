@@ -11,7 +11,7 @@ from app.agent.llm.base import Usage
 
 DEFAULT_MODELS = {
     "anthropic": "claude-opus-5-5",
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-3.5-flash",
     "ollama": "qwen3:8b",
 }
 

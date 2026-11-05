@@ -375,7 +375,7 @@ async def test_ollama_errors_are_actionable():
     "provider,cls,model",
     [
         ("anthropic", AnthropicLLM, "claude-opus-5-5"),
-        ("gemini", GeminiLLM, "gemini-2.5-flash"),
+        ("gemini", GeminiLLM, "gemini-3.5-flash"),
         ("ollama", OllamaLLM, "qwen3:8b"),
     ],
 )

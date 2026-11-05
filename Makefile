@@ -21,7 +21,7 @@ test-db:
 	@cd backend && uv run --quiet python -m scripts.ensure_db --url "$(TEST_DATABASE_URL)"
 
 api:           ## Backend with reload on :8000
-	cd backend && uv run uvicorn app.main:create_app --factory --reload --port 8000
+	cd backend && uv run uvicorn app.main:create_app --factory --reload --host 127.0.0.1 --port 8000
 
 web:           ## Frontend dev server on :5173 (proxies /api to :8000)
 	cd frontend && npm run dev
