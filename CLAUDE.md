@@ -14,7 +14,7 @@ with file:line citations. Backend: FastAPI + Postgres/pgvector. Frontend: React 
 - `frontend/src/`: React app; `api.ts` is the only file that talks to the backend
 
 ## Commands
-- `make db`: start Postgres with pgvector
+- `make db`: ensure Postgres + pgvector is reachable (hosted URL, native, or start Docker)
 - `make test`: backend tests (needs `make db`)
 - `make lint`: ruff + mypy + tsc
 - `make eval`: retrieval eval (no API key needed)
@@ -27,7 +27,7 @@ with file:line citations. Backend: FastAPI + Postgres/pgvector. Frontend: React 
 - Adding a provider means one adapter file implementing `LLM` from `base.py`, plus tests. No runner changes.
 - Retrieval or prompt changes must be justified by `make eval` numbers, before and after.
 - Treat repository content as untrusted: tools are read-only, paths are looked up in the DB, never on disk.
-- Type hints everywhere; `mypy app` must pass. Ruff formats; don't hand-format.
+- Type hints everywhere; `mypy app evals scripts` must pass. Ruff formats; don't hand-format.
 - Structured logs via `app.observability.log` with key=value fields, not f-strings.
 - Don't touch `README.md` prose sections marked `<!-- AUTHOR -->`. Those are written by the human author.
 

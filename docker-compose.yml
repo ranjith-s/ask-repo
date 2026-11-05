@@ -18,7 +18,8 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: postgresql://askrepo:askrepo@db:5432/askrepo
+      # A hosted DATABASE_URL in .env (Neon, Supabase…) is used as is; otherwise the db service.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://askrepo:askrepo@db:5432/askrepo}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Ollama runs on your machine, not in this stack; reach it through the host.

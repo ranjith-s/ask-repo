@@ -10,8 +10,8 @@ model actually read.
 
 Requires Docker and one of: an [Anthropic API key](https://console.anthropic.com/),
 a [Gemini API key](https://aistudio.google.com/apikey), or [Ollama](https://ollama.com)
-running locally. See [LLM providers](#llm-providers). No Docker? See
-[Running without Docker](#running-without-docker).
+running locally. See [LLM providers](#llm-providers). No Docker, or a hosted database? See
+[Running without Docker](#running-without-docker) and [Using a hosted Postgres](#using-a-hosted-postgres-neon-supabase).
 
 ```bash
 cp .env.example .env        # set LLM_PROVIDER and that provider's key
@@ -83,7 +83,7 @@ plus Python 3.12+ with uv, Node 22, and git (used to clone the repos you index).
    ```
    Open http://localhost:5173. `make dev` sees Postgres already listening on
    `localhost:5432` and does not try to start Docker. If your Postgres uses another port,
-   run `make dev DB_PORT=5433` and set `DATABASE_URL` to match.
+   set it in `DATABASE_URL`; `make` reads the host and port from there.
 
 Differences from the Docker setup:
 - **First indexing is slower.** The embedding model (~130 MB) downloads once into a
@@ -91,6 +91,50 @@ Differences from the Docker setup:
 - **Ollama** is reached at `http://localhost:11434` (the default outside Docker).
 - **If pgvector is missing**, the app stops at startup with a message saying how to install
   it, rather than failing later.
+
+### Using a hosted Postgres (Neon, Supabase)
+
+Any Postgres 16+ with pgvector works, so you don't need to run a database yourself. Put
+the provider's connection string in `.env`:
+
+```bash
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DBNAME?sslmode=require
+```
+
+Then use the normal commands. `make dev` sees that the host is not local, checks it can
+reach it, and does not start anything locally. Docker Compose also uses this URL when it
+is set: run `docker compose up --build app` to start only the app. On startup the app
+creates the `vector` extension and its tables in that database.
+
+| | Neon | Supabase |
+|---|---|---|
+| Connection string | Dashboard → **Connect** | Project → **Connect** |
+| Which one to use | The **direct** string (host without `-pooler`). The pooled one also works. | The **session pooler** (`…pooler.supabase.com:5432`). The direct `db.<ref>.supabase.co` host is IPv6-only unless you add IPv4, which many home networks and Docker can't reach. The transaction pooler (port `6543`) also works. |
+| pgvector | Created by the app on startup | Created by the app on startup, or enable **vector** under Database → Extensions |
+| Keep in the URL | `sslmode=require` (and `channel_binding=require` if given) | `sslmode=require` |
+| Free tier pauses | After a few idle minutes; the first query wakes it (about a second) | Projects pause after about a week without use; resume in the dashboard |
+
+The connection pool is set up for hosted databases:
+- **Transaction-mode poolers** (Supabase port 6543, PgBouncer) hand each transaction to a
+  different server connection, which breaks server-side prepared statements after a few
+  queries ("prepared statement already exists"). The pool disables them, at negligible cost
+  for this app's queries.
+- **Dropped connections**: Neon closes idle connections when it suspends. Without a check,
+  the first questions after an idle period would fail. The pool checks each connection
+  before use and silently reconnects.
+
+Both were reproduced and fixed against a local PgBouncer in transaction mode and by killing
+server connections, and both are covered by tests (`tests/test_config_db.py`).
+
+Things to know:
+- **Storage**: one indexed repo the size of Starlette (117 files, ~2,300 chunks) takes
+  about 22 MB, mostly vectors and their index. A 0.5 GB free tier fits roughly 20 such repos.
+- **Latency**: every tool call is one or two queries, so a database in a region near you
+  keeps deep answers snappy.
+- **Tests never use `DATABASE_URL`.** They create and drop their own `askrepo_test` database,
+  on local Postgres by default (`TEST_DATABASE_URL`). Keep them away from a hosted database
+  you care about.
+- **Credentials** stay in `.env`, which git ignores. `make db` prints only the host and port.
 
 ## What it does
 

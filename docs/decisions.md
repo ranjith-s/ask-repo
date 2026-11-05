@@ -19,5 +19,6 @@ These are working notes; the README explains the reasoning in prose.
 | Modes | Deep (agent) and Quick (single retrieval) | Agent only | Quick is ~1 call: cheaper and faster, and it is the baseline the agent must beat. |
 | Guardrails | Read-only tools; paths only resolved in DB; GitHub-only URLs; size limits; step cap with final no-tools turn; prompt-injection notice; citation validity + grounding check | LLM-judge on every answer | Deterministic checks are free and run on every answer. |
 | Observability | structlog JSON + request IDs; `query_logs` table (steps, tokens, cost, latency) | OpenTelemetry / Langfuse | No extra service needed for the demo; OTel is the production path. |
+| DB connections | psycopg pool, no server-side prepared statements, connection check before use | Default pool settings; SQLAlchemy | Works unchanged on local Postgres, Neon and Supabase, including transaction-mode poolers and idle disconnects. Both failure modes were reproduced before fixing. |
 | Frontend | React + Vite, served by FastAPI | Next.js | FastAPI owns the backend; one container, no CORS. |
 | Ingestion jobs | FastAPI `BackgroundTasks` | Celery / SQS worker | Enough for a demo; production would move this to a queue. |
