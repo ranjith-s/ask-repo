@@ -39,8 +39,10 @@ lint:          ## Ruff, mypy and the TypeScript compiler
 fmt:
 	cd backend && uv run ruff check --fix . && uv run ruff format .
 
-eval: db       ## Retrieval eval (no API key needed)
-	cd backend && uv run python -m evals.run_retrieval
+# Eval set: starlette (Python), ky (TypeScript) or express (JavaScript)
+SET ?= starlette
+eval: db       ## Retrieval eval (no API key needed); SET=ky or SET=express for JS/TS
+	cd backend && uv run python -m evals.run_retrieval --set $(SET)
 
 eval-answers: db  ## Answer eval on the configured LLM provider (API providers cost money)
-	cd backend && uv run python -m evals.run_answers
+	cd backend && uv run python -m evals.run_answers --set $(SET)

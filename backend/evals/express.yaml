@@ -1,0 +1,100 @@
+# JavaScript (CommonJS) eval set: expressjs/express, the Node.js web framework.
+# Same format and categories as starlette.yaml.
+repo: expressjs/express
+commit: 43fca52d28a422c8be48fd489cbd4f2d6152bab6
+
+questions:
+  - id: res-send
+    category: concept
+    question: How does res.send decide the Content-Type and set the ETag?
+    expected_files: [lib/response.js]
+
+  - id: res-json
+    category: lookup
+    question: How does res.json serialize the response body?
+    expected_files: [lib/response.js]
+
+  - id: cookies
+    category: concept
+    question: How are cookies set on the response, including signed cookies?
+    expected_files: [lib/response.js]
+
+  - id: redirect
+    category: lookup
+    question: How does res.redirect build the redirect response?
+    expected_files: [lib/response.js]
+
+  - id: send-file
+    category: concept
+    question: How are files sent to the client?
+    expected_files: [lib/response.js]
+
+  - id: content-negotiation
+    category: concept
+    question: How does res.format pick which response type to send?
+    expected_files: [lib/response.js]
+
+  - id: req-ip-proxy
+    category: concept
+    question: How is the client IP address determined when the app runs behind a proxy?
+    expected_files: [lib/request.js, lib/utils.js]
+
+  - id: req-fresh
+    category: concept
+    question: How does Express decide whether a cached response is still fresh?
+    expected_files: [lib/request.js]
+
+  - id: accepts
+    category: lookup
+    question: How does req.accepts check the Accept header?
+    expected_files: [lib/request.js]
+
+  - id: listen
+    category: lookup
+    question: What does app.listen do?
+    expected_files: [lib/application.js]
+
+  - id: views
+    category: concept
+    question: How are view templates found and rendered?
+    expected_files: [lib/view.js, lib/application.js]
+
+  - id: settings
+    category: concept
+    question: How do app settings like enable and disable work?
+    expected_files: [lib/application.js]
+
+  - id: default-config
+    category: concept
+    question: What settings does a new application get by default?
+    expected_files: [lib/application.js]
+
+  - id: create-app
+    category: location
+    question: Where is the application object created when you call express()?
+    expected_files: [lib/express.js]
+
+  - id: etag
+    category: lookup
+    question: How is the ETag generator chosen from the etag setting?
+    expected_files: [lib/utils.js]
+
+  - id: query-parser
+    category: concept
+    question: How is the query string parser chosen?
+    expected_files: [lib/utils.js, lib/application.js]
+
+  - id: dependencies
+    category: deps
+    question: What are the runtime dependencies?
+    expected_files: [package.json]
+
+  - id: no-database
+    category: negative
+    question: How does Express connect to a MongoDB database?
+    expected_files: []
+
+  - id: no-orm
+    category: negative
+    question: Which ORM does Express use for models?
+    expected_files: []

@@ -1,0 +1,95 @@
+# TypeScript eval set: sindresorhus/ky, a small HTTP client built on fetch.
+# Same format and categories as starlette.yaml.
+repo: sindresorhus/ky
+commit: 3541888878c4d303a8bc2ad61815f4e048f55a5d
+
+questions:
+  - id: retry-delay
+    category: concept
+    question: How is the delay between retries calculated?
+    expected_files: [source/core/Ky.ts, source/core/retry-timing.ts]
+
+  - id: retry-after
+    category: concept
+    question: Does it respect the Retry-After header from the server, and how?
+    expected_files: [source/core/retry-timing.ts]
+
+  - id: retry-status-codes
+    category: lookup
+    question: Which HTTP status codes are retried by default?
+    expected_files: [source/utils/normalize.ts]
+
+  - id: timeout
+    category: concept
+    question: How are request timeouts enforced?
+    expected_files: [source/utils/timeout.ts, source/core/Ky.ts]
+
+  - id: http-error
+    category: lookup
+    question: What does HTTPError contain when a request gets a non-2xx response?
+    expected_files: [source/errors/HTTPError.ts]
+
+  - id: hooks
+    category: concept
+    question: How are the beforeRequest and afterResponse hooks run?
+    expected_files: [source/core/Ky.ts, source/types/hooks.ts]
+
+  - id: merge-headers
+    category: lookup
+    question: How does mergeHeaders combine default headers with per-request headers?
+    expected_files: [source/utils/merge.ts]
+
+  - id: normalize-method
+    category: lookup
+    question: How are request method names normalized?
+    expected_files: [source/utils/normalize.ts]
+
+  - id: search-params
+    category: concept
+    question: How are search parameters added to the request URL?
+    expected_files: [source/core/Ky.ts]
+
+  - id: prefix
+    category: concept
+    question: How is the prefix option combined with the request URL?
+    expected_files: [source/core/Ky.ts]
+
+  - id: create-extend
+    category: location
+    question: Where are ky.create and ky.extend defined?
+    expected_files: [source/index.ts]
+
+  - id: response-size
+    category: concept
+    question: How is the response body size limited?
+    expected_files: [source/utils/body.ts]
+
+  - id: json-schema
+    category: concept
+    question: How is a JSON response parsed and validated against a schema?
+    expected_files: [source/core/Ky.ts]
+
+  - id: upload-progress
+    category: concept
+    question: How is upload progress reported?
+    expected_files: [source/utils/body.ts, source/core/Ky.ts]
+
+  - id: delay-abort
+    category: lookup
+    question: How does the delay helper stop early when the request is aborted?
+    expected_files: [source/utils/delay.ts]
+
+  - id: dependencies
+    category: deps
+    question: What does the package depend on, and which Node.js version does it require?
+    expected_files: [package.json]
+
+  - id: no-cache
+    category: negative
+    question: How does ky cache responses on disk?
+    expected_files: []
+
+  - id: no-graphql
+    category: negative
+    question: Which GraphQL client library does ky use internally?
+    expected_files: []

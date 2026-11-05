@@ -1,0 +1,142 @@
+{
+  "run_at": "2026-11-05T18:35:25.908023+00:00",
+  "repo": "expressjs/express",
+  "commit": "43fca52d28a422c8be48fd489cbd4f2d6152bab6",
+  "embedding": "hash",
+  "k": 5,
+  "summary": {
+    "vector": {
+      "hit@5": 0.176,
+      "mrr": 0.111
+    },
+    "keyword": {
+      "hit@5": 0.882,
+      "mrr": 0.778
+    },
+    "hybrid": {
+      "hit@5": 0.824,
+      "mrr": 0.509
+    }
+  },
+  "questions": [
+    {
+      "id": "res-send",
+      "category": "concept",
+      "vector": 4,
+      "keyword": 1,
+      "hybrid": 1
+    },
+    {
+      "id": "res-json",
+      "category": "lookup",
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 2
+    },
+    {
+      "id": "cookies",
+      "category": "concept",
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 4
+    },
+    {
+      "id": "redirect",
+      "category": "lookup",
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 2
+    },
+    {
+      "id": "send-file",
+      "category": "concept",
+      "vector": null,
+      "keyword": null,
+      "hybrid": null
+    },
+    {
+      "id": "content-negotiation",
+      "category": "concept",
+      "vector": 7,
+      "keyword": 1,
+      "hybrid": 1
+    },
+    {
+      "id": "req-ip-proxy",
+      "category": "concept",
+      "vector": null,
+      "keyword": 7,
+      "hybrid": 6
+    },
+    {
+      "id": "req-fresh",
+      "category": "concept",
+      "vector": null,
+      "keyword": 3,
+      "hybrid": 3
+    },
+    {
+      "id": "accepts",
+      "category": "lookup",
+      "vector": 1,
+      "keyword": 1,
+      "hybrid": 1
+    },
+    {
+      "id": "listen",
+      "category": "lookup",
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 3
+    },
+    {
+      "id": "views",
+      "category": "concept",
+      "vector": null,
+      "keyword": 2,
+      "hybrid": 4
+    },
+    {
+      "id": "settings",
+      "category": "concept",
+      "vector": 2,
+      "keyword": 1,
+      "hybrid": 1
+    },
+    {
+      "id": "default-config",
+      "category": "concept",
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 1
+    },
+    {
+      "id": "create-app",
+      "category": "location",
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 2
+    },
+    {
+      "id": "etag",
+      "category": "lookup",
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 2
+    },
+    {
+      "id": "query-parser",
+      "category": "concept",
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 5
+    },
+    {
+      "id": "dependencies",
+      "category": "deps",
+      "vector": null,
+      "keyword": 4,
+      "hybrid": 8
+    }
+  ]
+}

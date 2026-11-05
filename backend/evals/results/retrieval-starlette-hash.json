@@ -1,5 +1,5 @@
 {
-  "run_at": "2026-11-05T08:36:03.529846+00:00",
+  "run_at": "2026-11-05T18:35:22.416351+00:00",
   "repo": "encode/starlette",
   "commit": "0f08970e5cce0aec4fc1cea7447c262d741795eb",
   "embedding": "hash",
@@ -7,15 +7,15 @@
   "summary": {
     "vector": {
       "hit@5": 0.15,
-      "mrr": 0.109
+      "mrr": 0.096
     },
     "keyword": {
-      "hit@5": 0.55,
-      "mrr": 0.403
+      "hit@5": 0.75,
+      "mrr": 0.496
     },
     "hybrid": {
-      "hit@5": 0.5,
-      "mrr": 0.313
+      "hit@5": 0.65,
+      "mrr": 0.345
     }
   },
   "questions": [
@@ -23,7 +23,7 @@
       "id": "routing-match",
       "category": "concept",
       "vector": 6,
-      "keyword": 2,
+      "keyword": 3,
       "hybrid": 1
     },
     {
@@ -37,35 +37,35 @@
       "id": "cors-preflight",
       "category": "concept",
       "vector": null,
-      "keyword": 3,
-      "hybrid": 2
+      "keyword": 2,
+      "hybrid": 5
     },
     {
       "id": "background-tasks",
       "category": "concept",
       "vector": null,
-      "keyword": null,
-      "hybrid": null
+      "keyword": 4,
+      "hybrid": 6
     },
     {
       "id": "testclient",
       "category": "concept",
       "vector": null,
-      "keyword": null,
-      "hybrid": null
+      "keyword": 8,
+      "hybrid": 9
     },
     {
       "id": "multipart",
       "category": "concept",
       "vector": 3,
-      "keyword": 6,
-      "hybrid": 1
+      "keyword": null,
+      "hybrid": 2
     },
     {
       "id": "convertors",
       "category": "location",
       "vector": null,
-      "keyword": 8,
+      "keyword": null,
       "hybrid": 7
     },
     {
@@ -80,7 +80,7 @@
       "category": "concept",
       "vector": 5,
       "keyword": 1,
-      "hybrid": 2
+      "hybrid": 1
     },
     {
       "id": "static-traversal",
@@ -93,15 +93,15 @@
       "id": "streaming-response",
       "category": "lookup",
       "vector": null,
-      "keyword": 6,
-      "hybrid": null
+      "keyword": 3,
+      "hybrid": 7
     },
     {
       "id": "dependencies",
       "category": "deps",
       "vector": null,
-      "keyword": 7,
-      "hybrid": null
+      "keyword": 4,
+      "hybrid": 9
     },
     {
       "id": "config-env",
@@ -114,50 +114,50 @@
       "id": "websocket-accept",
       "category": "concept",
       "vector": null,
-      "keyword": 2,
-      "hybrid": 8
+      "keyword": 3,
+      "hybrid": 5
     },
     {
       "id": "gzip-threshold",
       "category": "concept",
       "vector": null,
-      "keyword": 2,
-      "hybrid": 6
+      "keyword": 1,
+      "hybrid": 4
     },
     {
       "id": "lifespan",
       "category": "concept",
       "vector": null,
-      "keyword": null,
-      "hybrid": 7
+      "keyword": 8,
+      "hybrid": 3
     },
     {
       "id": "request-body-cache",
       "category": "concept",
-      "vector": 6,
-      "keyword": 7,
+      "vector": null,
+      "keyword": null,
       "hybrid": null
     },
     {
       "id": "http-endpoint",
       "category": "lookup",
-      "vector": 9,
-      "keyword": 2,
-      "hybrid": 3
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 5
     },
     {
       "id": "trusted-host",
       "category": "location",
-      "vector": 9,
-      "keyword": 7,
-      "hybrid": 5
+      "vector": 8,
+      "keyword": 3,
+      "hybrid": 3
     },
     {
       "id": "middleware-stack",
       "category": "concept",
       "vector": null,
-      "keyword": 2,
-      "hybrid": 8
+      "keyword": 1,
+      "hybrid": 6
     }
   ]
 }

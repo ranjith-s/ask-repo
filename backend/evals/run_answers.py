@@ -25,7 +25,7 @@ from typing import Any
 from app.agent.llm import create_llm, resolve_price
 from app.agent.runner import QuestionAnswerer
 from app.config import Settings
-from evals.common import EVALS_DIR, index_eval_repo, load_eval_set
+from evals.common import EVAL_SETS, EVALS_DIR, index_eval_repo, load_eval_set
 
 DECLINE = re.compile(
     r"\b(does not|doesn't|do not|don't|no)\b.{0,60}\b(contain|include|implement|use|support|provide|find|mention)",
@@ -33,11 +33,11 @@ DECLINE = re.compile(
 )
 
 
-async def run(mode: str, only: set[str] | None) -> None:
+async def run(set_name: str, mode: str, only: set[str] | None) -> None:
     settings = Settings()
     if problem := settings.llm_problem():
         raise SystemExit(f"Cannot run the answer eval: {problem}")
-    eval_set = load_eval_set()
+    eval_set = load_eval_set(set_name)
     ctx = index_eval_repo(eval_set, settings)
     answerer = QuestionAnswerer(ctx.store, ctx.embedder, create_llm(settings), settings, resolve_price(settings))
 
@@ -96,7 +96,7 @@ async def run(mode: str, only: set[str] | None) -> None:
         "total_cost_usd": round(sum(r["cost_usd"] for r in rows), 4),
     }
     print("\n" + "\n".join(f"{k:<20}{v}" for k, v in summary.items()))
-    out = EVALS_DIR / "results" / f"answers-{settings.llm_provider}-{mode}.json"
+    out = EVALS_DIR / "results" / f"answers-{set_name}-{settings.llm_provider}-{mode}.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(
         json.dumps(
@@ -128,10 +128,11 @@ def _mean(values: list[float]) -> float:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--set", choices=EVAL_SETS, default="starlette", help="which eval set (repo) to run")
     parser.add_argument("--mode", choices=["deep", "quick"], default="deep")
     parser.add_argument("--only", default="", help="comma-separated question ids")
     args = parser.parse_args()
-    asyncio.run(run(args.mode, set(args.only.split(",")) if args.only else None))
+    asyncio.run(run(args.set, args.mode, set(args.only.split(",")) if args.only else None))
 
 
 if __name__ == "__main__":

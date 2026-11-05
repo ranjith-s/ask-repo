@@ -32,8 +32,11 @@ class EvalSet:
     questions: list[Question]
 
 
-def load_eval_set(path: Path = EVALS_DIR / "starlette.yaml") -> EvalSet:
-    raw = yaml.safe_load(path.read_text())
+EVAL_SETS = ("starlette", "ky", "express")  # Python, TypeScript, JavaScript
+
+
+def load_eval_set(name: str = "starlette") -> EvalSet:
+    raw = yaml.safe_load((EVALS_DIR / f"{name}.yaml").read_text())
     return EvalSet(raw["repo"], raw["commit"], [Question(**q) for q in raw["questions"]])
 
 

@@ -1,0 +1,135 @@
+{
+  "run_at": "2026-11-05T18:35:24.717792+00:00",
+  "repo": "sindresorhus/ky",
+  "commit": "3541888878c4d303a8bc2ad61815f4e048f55a5d",
+  "embedding": "hash",
+  "k": 5,
+  "summary": {
+    "vector": {
+      "hit@5": 0.125,
+      "mrr": 0.083
+    },
+    "keyword": {
+      "hit@5": 0.625,
+      "mrr": 0.399
+    },
+    "hybrid": {
+      "hit@5": 0.438,
+      "mrr": 0.27
+    }
+  },
+  "questions": [
+    {
+      "id": "retry-delay",
+      "category": "concept",
+      "vector": null,
+      "keyword": 6,
+      "hybrid": 8
+    },
+    {
+      "id": "retry-after",
+      "category": "concept",
+      "vector": null,
+      "keyword": 3,
+      "hybrid": 9
+    },
+    {
+      "id": "retry-status-codes",
+      "category": "lookup",
+      "vector": null,
+      "keyword": null,
+      "hybrid": null
+    },
+    {
+      "id": "timeout",
+      "category": "concept",
+      "vector": 3,
+      "keyword": 7,
+      "hybrid": 3
+    },
+    {
+      "id": "http-error",
+      "category": "lookup",
+      "vector": null,
+      "keyword": 6,
+      "hybrid": null
+    },
+    {
+      "id": "hooks",
+      "category": "concept",
+      "vector": null,
+      "keyword": 2,
+      "hybrid": 2
+    },
+    {
+      "id": "merge-headers",
+      "category": "lookup",
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 2
+    },
+    {
+      "id": "normalize-method",
+      "category": "lookup",
+      "vector": null,
+      "keyword": 4,
+      "hybrid": 10
+    },
+    {
+      "id": "search-params",
+      "category": "concept",
+      "vector": null,
+      "keyword": 2,
+      "hybrid": 5
+    },
+    {
+      "id": "prefix",
+      "category": "concept",
+      "vector": null,
+      "keyword": 2,
+      "hybrid": 7
+    },
+    {
+      "id": "create-extend",
+      "category": "location",
+      "vector": null,
+      "keyword": null,
+      "hybrid": null
+    },
+    {
+      "id": "response-size",
+      "category": "concept",
+      "vector": 1,
+      "keyword": 1,
+      "hybrid": 1
+    },
+    {
+      "id": "json-schema",
+      "category": "concept",
+      "vector": null,
+      "keyword": 2,
+      "hybrid": 5
+    },
+    {
+      "id": "upload-progress",
+      "category": "concept",
+      "vector": null,
+      "keyword": 1,
+      "hybrid": 1
+    },
+    {
+      "id": "delay-abort",
+      "category": "lookup",
+      "vector": null,
+      "keyword": 8,
+      "hybrid": null
+    },
+    {
+      "id": "dependencies",
+      "category": "deps",
+      "vector": null,
+      "keyword": 5,
+      "hybrid": 9
+    }
+  ]
+}

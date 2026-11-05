@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 
 from app.config import Settings
 from app.models import SearchHit
-from evals.common import EVALS_DIR, index_eval_repo, load_eval_set
+from evals.common import EVAL_SETS, EVALS_DIR, index_eval_repo, load_eval_set
 
 DEPTH = 10
 
@@ -34,6 +34,7 @@ def first_relevant_rank(hits: list[SearchHit], expected: list[str]) -> int | Non
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--set", choices=EVAL_SETS, default="starlette", help="which eval set (repo) to run")
     parser.add_argument("--k", type=int, default=5)
     parser.add_argument("--embedding", choices=["fastembed", "hash"], default=None)
     parser.add_argument("--reindex", action="store_true")
@@ -42,7 +43,7 @@ def main() -> None:
     settings = Settings()
     if args.embedding:
         settings = settings.model_copy(update={"embedding_backend": args.embedding})
-    eval_set = load_eval_set()
+    eval_set = load_eval_set(args.set)
     ctx = index_eval_repo(eval_set, settings, reindex=args.reindex)
     repo_id, store, embedder = ctx.repo["id"], ctx.store, ctx.embedder
 
@@ -85,7 +86,7 @@ def main() -> None:
     for row in per_question:
         print(f"  {row['id']:<20}" + "".join(f"{(row[s] or '-')!s:>9}" for s in strategies))
 
-    out = EVALS_DIR / "results" / f"retrieval-{settings.embedding_backend}.json"
+    out = EVALS_DIR / "results" / f"retrieval-{args.set}-{settings.embedding_backend}.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(
         json.dumps(
