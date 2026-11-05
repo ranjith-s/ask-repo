@@ -175,3 +175,48 @@ def test_reindexing_starts_from_zero(store, embedder, settings):
     store.upsert_repo(url, "reindex")
     pending = store.find_repo_by_url(url)
     assert pending["status"] == "pending" and pending["progress_done"] == 0 and pending["progress_total"] is None
+
+
+# ---- Stopping a stalled clone on each platform ------------------------------------------
+
+
+class FakeProc:
+    pid = 4242
+
+    def __init__(self) -> None:
+        self.killed = False
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+def test_windows_stops_the_whole_process_tree_with_taskkill(monkeypatch):
+    from app.ingest import source
+
+    calls: list[list[str]] = []
+    monkeypatch.setattr(source.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
+    proc = FakeProc()
+    source.kill_process_tree(proc, windows=True)  # type: ignore[arg-type]
+    assert calls == [["taskkill", "/F", "/T", "/PID", "4242"]] and not proc.killed
+
+
+def test_windows_falls_back_to_killing_git_if_taskkill_is_missing(monkeypatch):
+    from app.ingest import source
+
+    def missing(cmd, **kw):
+        raise FileNotFoundError("taskkill")
+
+    monkeypatch.setattr(source.subprocess, "run", missing)
+    proc = FakeProc()
+    source.kill_process_tree(proc, windows=True)  # type: ignore[arg-type]
+    assert proc.killed
+
+
+def test_posix_path_never_calls_taskkill(monkeypatch):
+    from app.ingest import source
+
+    calls: list[object] = []
+    monkeypatch.setattr(source.subprocess, "run", lambda *a, **kw: calls.append(a))
+    monkeypatch.setattr(source.os, "killpg", lambda pid, sig: calls.append(("killpg", pid)))
+    source.kill_process_tree(FakeProc(), windows=False)  # type: ignore[arg-type]
+    assert calls == [("killpg", 4242)]

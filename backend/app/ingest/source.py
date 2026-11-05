@@ -135,20 +135,39 @@ def _lines(stream: IO[bytes]) -> Iterator[str]:
         yield buffer.decode(errors="replace")
 
 
+def kill_process_tree(proc: "subprocess.Popen[bytes]", windows: bool = os.name == "nt") -> None:
+    """Stop a process and every child it started.
+
+    Killing only the parent would leave children holding its output pipe open, so a reader
+    would wait for them. POSIX: kill the process group (the process was started in its own
+    session). Windows has no process groups in that sense: `taskkill /T` stops the tree.
+    """
+    if windows:
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=30, check=False
+            )
+            return
+        except (OSError, subprocess.TimeoutExpired):
+            proc.kill()  # taskkill unavailable: at least stop git itself
+            return
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(proc.pid, signal.SIGKILL)
+
+
 def shallow_clone(url: str, dest: Path, timeout_s: int, on_progress: CloneProgress | None = None) -> str:
     """Clone the default branch at depth 1, reporting progress, and return the commit SHA."""
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_LFS_SKIP_SMUDGE": "1"}
     cmd = ["git", "clone", "--progress", "--depth", "1", "--single-branch", "--no-tags", url, str(dest)]
-    # Own process group: git spawns helpers (git-remote-https, index-pack) that inherit the
-    # stderr pipe. Killing only git would leave them holding it open, and reading would hang.
+    # Own process group (POSIX; Windows ignores this): git spawns helpers (git-remote-https,
+    # index-pack) that inherit the stderr pipe, so the whole tree must be stopped on timeout.
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env, start_new_session=True)
     assert proc.stderr is not None
     timed_out = threading.Event()
 
     def kill() -> None:  # a timer, because a stalled git prints nothing we could react to
         timed_out.set()
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(proc.pid, signal.SIGKILL)
+        kill_process_tree(proc)
 
     timer = threading.Timer(timeout_s, kill)
     timer.start()
