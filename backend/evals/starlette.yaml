@@ -1,0 +1,124 @@
+# Eval set for Ask Repo, written against encode/starlette.
+# Each question lists the file(s) a correct answer must draw on. A question
+# passes retrieval@k if ANY expected file appears in the top-k results.
+# `category` lets us see where each retrieval strategy is weak.
+#
+# Categories:
+#   concept   - "how does X work", natural language, no identifiers
+#   lookup    - names a specific identifier
+#   location  - "where is X implemented"
+#   deps      - project metadata / dependencies
+#   negative  - not answerable from this repo; the agent should say so
+repo: encode/starlette
+commit: 0f08970e5cce0aec4fc1cea7447c262d741795eb
+
+questions:
+  - id: routing-match
+    category: concept
+    question: How does Starlette match an incoming request path to a route?
+    expected_files: [starlette/routing.py]
+
+  - id: url-path-for
+    category: lookup
+    question: How does url_path_for build a URL for a named route?
+    expected_files: [starlette/routing.py]
+
+  - id: cors-preflight
+    category: concept
+    question: How are CORS preflight requests answered?
+    expected_files: [starlette/middleware/cors.py]
+
+  - id: background-tasks
+    category: concept
+    question: How do background tasks run after the response has been sent?
+    expected_files: [starlette/background.py, starlette/responses.py]
+
+  - id: testclient
+    category: concept
+    question: How does the test client send requests to the app without starting a server?
+    expected_files: [starlette/testclient.py]
+
+  - id: multipart
+    category: concept
+    question: How are multipart form uploads parsed?
+    expected_files: [starlette/formparsers.py]
+
+  - id: convertors
+    category: location
+    question: Where are the path parameter convertors like int and uuid defined?
+    expected_files: [starlette/convertors.py]
+
+  - id: sessions-signing
+    category: concept
+    question: How does the session middleware sign and verify the session cookie?
+    expected_files: [starlette/middleware/sessions.py]
+
+  - id: exception-handlers
+    category: concept
+    question: How are exceptions routed to the registered exception handlers?
+    expected_files: [starlette/_exception_handler.py, starlette/middleware/exceptions.py, starlette/middleware/errors.py]
+
+  - id: static-traversal
+    category: concept
+    question: How does serving static files prevent path traversal outside the directory?
+    expected_files: [starlette/staticfiles.py]
+
+  - id: streaming-response
+    category: lookup
+    question: How is StreamingResponse implemented?
+    expected_files: [starlette/responses.py]
+
+  - id: dependencies
+    category: deps
+    question: What are the project's runtime dependencies and optional extras?
+    expected_files: [pyproject.toml]
+
+  - id: config-env
+    category: concept
+    question: How does the Config class read settings from environment variables and .env files?
+    expected_files: [starlette/config.py]
+
+  - id: websocket-accept
+    category: concept
+    question: How is a WebSocket connection accepted and closed?
+    expected_files: [starlette/websockets.py]
+
+  - id: gzip-threshold
+    category: concept
+    question: When does the GZip middleware decide not to compress a response?
+    expected_files: [starlette/middleware/gzip.py]
+
+  - id: lifespan
+    category: concept
+    question: How are application startup and shutdown handled?
+    expected_files: [starlette/routing.py, starlette/applications.py]
+
+  - id: request-body-cache
+    category: concept
+    question: Can the request body be read twice? How is it cached?
+    expected_files: [starlette/requests.py]
+
+  - id: http-endpoint
+    category: lookup
+    question: What does HTTPEndpoint do with the request method?
+    expected_files: [starlette/endpoints.py]
+
+  - id: trusted-host
+    category: location
+    question: Where is the Host header validated against allowed hosts?
+    expected_files: [starlette/middleware/trustedhost.py]
+
+  - id: middleware-stack
+    category: concept
+    question: In what order is the middleware stack built around the app?
+    expected_files: [starlette/applications.py]
+
+  - id: no-database
+    category: negative
+    question: How does Starlette connect to a PostgreSQL database?
+    expected_files: []
+
+  - id: no-jwt
+    category: negative
+    question: Which JWT library does the authentication module use to decode tokens?
+    expected_files: []
