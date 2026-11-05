@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, GitBranch, Loader2, Plus } from 'lucide-react'
+import { AlertCircle, CheckCircle2, GitBranch, Loader2, Plus, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { BUSY_STATUSES, type Repo } from '../api'
 import { phaseProgress } from '../progress'
@@ -18,10 +18,24 @@ interface Props {
   selectedId: number | null
   onSelect: (id: number) => void
   onIndex: (url: string) => Promise<void>
+  onCancel: (id: number) => Promise<void>
+  onRemove: (id: number) => Promise<void>
 }
 
-export function Sidebar({ repos, selectedId, onSelect, onIndex }: Props) {
+export function Sidebar({ repos, selectedId, onSelect, onIndex, onCancel, onRemove }: Props) {
   const [url, setUrl] = useState('')
+  const [confirmingId, setConfirmingId] = useState<number | null>(null)
+  const [rowError, setRowError] = useState<{ id: number; message: string } | null>(null)
+
+  async function act(id: number, action: (id: number) => Promise<void>) {
+    setRowError(null)
+    try {
+      await action(id)
+      setConfirmingId(null)
+    } catch (e) {
+      setRowError({ id, message: (e as Error).message })
+    }
+  }
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -82,45 +96,103 @@ export function Sidebar({ repos, selectedId, onSelect, onIndex }: Props) {
         </p>
       </form>
 
-      <nav className="flex-1 overflow-y-auto p-2" aria-label="Repositories">
+      <nav className="flex-1 overflow-y-auto p-2" aria-label="Projects">
         {repos.map((repo) => {
           const busy = BUSY_STATUSES.includes(repo.status)
-          const progress = phaseProgress(repo)
+          const stopping = busy && repo.cancel_requested
+          const progress = stopping ? null : phaseProgress(repo)
           const active = repo.id === selectedId
+          const label = stopping ? 'Stopping' : STATUS_LABEL[repo.status]
           return (
-            <button
+            <div
               key={repo.id}
-              onClick={() => onSelect(repo.id)}
-              className={`mb-1 w-full rounded-lg px-3 py-2.5 text-left transition ${
+              className={`group relative mb-1 rounded-lg transition ${
                 active ? 'bg-indigo-50 ring-1 ring-indigo-200 dark:bg-indigo-950/50 dark:ring-indigo-900' : 'hover:bg-stone-100 dark:hover:bg-stone-800'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <GitBranch className="size-3.5 shrink-0 text-stone-400" />
-                <span className="truncate text-sm font-medium">{repo.name}</span>
-              </div>
-              <div className="mt-1 flex items-center gap-1.5 pl-5.5 text-xs text-stone-500">
-                {busy && <Loader2 className="size-3 animate-spin text-indigo-500" />}
-                {repo.status === 'ready' && <CheckCircle2 className="size-3 text-emerald-500" />}
-                {repo.status === 'failed' && <AlertCircle className="size-3 text-red-500" />}
-                <span>{STATUS_LABEL[repo.status]}</span>
-                {progress && <span className="tabular-nums">{progress.percent}%</span>}
-                {repo.status === 'ready' && (
-                  <span className="text-stone-400">
-                    · {repo.file_count.toLocaleString()} files
-                  </span>
+              <button onClick={() => onSelect(repo.id)} className="w-full rounded-lg px-3 py-2.5 pr-10 text-left">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="size-3.5 shrink-0 text-stone-400" />
+                  <span className="truncate text-sm font-medium">{repo.name}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-1.5 pl-5.5 text-xs text-stone-500">
+                  {busy && <Loader2 className="size-3 animate-spin text-indigo-500" />}
+                  {repo.status === 'ready' && <CheckCircle2 className="size-3 text-emerald-500" />}
+                  {repo.status === 'failed' && <AlertCircle className="size-3 text-red-500" />}
+                  <span>{label}</span>
+                  {progress && <span className="tabular-nums">{progress.percent}%</span>}
+                  {repo.status === 'ready' && (
+                    <span className="text-stone-400">· {repo.file_count.toLocaleString()} files</span>
+                  )}
+                </div>
+                {progress && (
+                  <ProgressBar percent={progress.percent} label={`${label} ${repo.name}`} className="mt-1.5 ml-5.5" />
                 )}
-              </div>
-              {progress && (
-                <ProgressBar percent={progress.percent} label={`${STATUS_LABEL[repo.status]} ${repo.name}`} className="mt-1.5 ml-5.5" />
+                {repo.status === 'failed' && repo.error && <p className="mt-1 pl-5.5 text-xs text-red-600">{repo.error}</p>}
+              </button>
+
+              <RowAction repo={repo} busy={busy} stopping={stopping} confirming={confirmingId === repo.id}
+                onAsk={() => setConfirmingId(repo.id)} onCancel={() => void act(repo.id, onCancel)} />
+
+              {confirmingId === repo.id && (
+                <div className="mx-3 mb-2.5 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-2 text-xs dark:border-stone-700">
+                  <span className="text-stone-600 dark:text-stone-300">Remove this project? You can add it again later.</span>
+                  <button
+                    onClick={() => void act(repo.id, onRemove)}
+                    className="rounded-md bg-red-600 px-2 py-1 font-medium text-white hover:bg-red-500"
+                  >
+                    Remove
+                  </button>
+                  <button
+                    onClick={() => setConfirmingId(null)}
+                    className="rounded-md px-2 py-1 text-stone-600 hover:bg-stone-200 dark:text-stone-300 dark:hover:bg-stone-700"
+                  >
+                    Keep
+                  </button>
+                </div>
               )}
-              {repo.status === 'failed' && repo.error && (
-                <p className="mt-1 pl-5.5 text-xs text-red-600">{repo.error}</p>
-              )}
-            </button>
+              {rowError?.id === repo.id && <p className="mx-3 mb-2 text-xs text-red-600">{rowError.message}</p>}
+            </div>
           )
         })}
       </nav>
     </aside>
+  )
+}
+
+/** The small button at the top right of a project row: cancel while setting up, else remove. */
+function RowAction(props: {
+  repo: Repo
+  busy: boolean
+  stopping: boolean
+  confirming: boolean
+  onAsk: () => void
+  onCancel: () => void
+}) {
+  const { repo, busy, stopping, confirming } = props
+  const base = 'absolute top-2 right-2 rounded-md p-1.5 text-stone-400 transition'
+  if (busy) {
+    return (
+      <button
+        onClick={props.onCancel}
+        disabled={stopping}
+        title={stopping ? 'Stopping…' : 'Cancel setup'}
+        aria-label={stopping ? `Stopping setup of ${repo.name}` : `Cancel setting up ${repo.name}`}
+        className={`${base} hover:bg-stone-200 hover:text-stone-700 disabled:opacity-50 dark:hover:bg-stone-700`}
+      >
+        {stopping ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
+      </button>
+    )
+  }
+  if (confirming) return null
+  return (
+    <button
+      onClick={props.onAsk}
+      title="Remove project"
+      aria-label={`Remove ${repo.name}`}
+      className={`${base} opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 focus-visible:opacity-100 max-md:opacity-100 dark:hover:bg-red-950/50`}
+    >
+      <Trash2 className="size-3.5" />
+    </button>
   )
 }

@@ -35,7 +35,10 @@ export default function App() {
   const refreshRepos = useCallback(async () => {
     const list = await api.listRepos()
     setRepos(list)
-    setSelectedId((current) => current ?? list.find((r) => r.status === 'ready')?.id ?? list[0]?.id ?? null)
+    // Keep the current selection if it still exists (a cancelled or removed project disappears).
+    setSelectedId((current) =>
+      list.some((r) => r.id === current) ? current : (list.find((r) => r.status === 'ready')?.id ?? list[0]?.id ?? null),
+    )
   }, [])
 
   useEffect(() => {
@@ -54,6 +57,18 @@ export default function App() {
   const repo = useMemo(() => repos.find((r) => r.id === selectedId) ?? null, [repos, selectedId])
   const turns = useMemo(() => (selectedId ? (conversations[selectedId] ?? []) : []), [conversations, selectedId])
   const streaming = turns.some((t) => t.status === 'streaming')
+
+  async function cancelSetup(id: number) {
+    await api.cancelIndexing(id)
+    await refreshRepos()
+  }
+
+  async function removeRepo(id: number) {
+    await api.removeRepo(id)
+    setConversations(({ [id]: _removed, ...rest }) => rest)
+    if (id === selectedId) setOpenLocation(null)
+    await refreshRepos()
+  }
 
   async function indexRepo(url: string) {
     const created = await api.indexRepo(url)
@@ -128,13 +143,13 @@ export default function App() {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <Sidebar repos={repos} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setOpenLocation(null) }} onIndex={indexRepo} />
+        <Sidebar repos={repos} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setOpenLocation(null) }} onIndex={indexRepo} onCancel={cancelSetup} onRemove={removeRepo} />
 
         <main className={`flex min-h-0 flex-1 flex-col ${openLocation ? 'hidden lg:flex' : ''}`}>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto max-w-3xl space-y-6 px-4 py-6">
               {!repo && <EmptyState />}
-              {repo && repo.status !== 'ready' && <IndexingState repo={repo} />}
+              {repo && repo.status !== 'ready' && <IndexingState repo={repo} onCancel={() => void cancelSetup(repo.id)} />}
               {repo?.status === 'ready' && turns.length === 0 && <Welcome repo={repo} onAsk={ask} />}
               {turns.map((t) => (
                 <AnswerCard key={t.id} turn={t} onOpen={setOpenLocation} />
@@ -240,7 +255,7 @@ function Welcome({ repo, onAsk }: { repo: Repo; onAsk: (q: string) => void }) {
   )
 }
 
-function IndexingState({ repo }: { repo: Repo }) {
+function IndexingState({ repo, onCancel }: { repo: Repo; onCancel: () => void }) {
   if (repo.status === 'failed') {
     return <p className="pt-16 text-center text-sm text-red-600">Couldn't add this project. {repo.error}</p>
   }
@@ -269,9 +284,16 @@ function IndexingState({ repo }: { repo: Repo }) {
           </span>
         </p>
       </div>
-      {repo.status === 'embedding' && (
+      {repo.status === 'embedding' && !repo.cancel_requested && (
         <p className="mt-4 text-xs text-stone-400">This is the longest step: about a minute for a typical project.</p>
       )}
+      <button
+        onClick={onCancel}
+        disabled={repo.cancel_requested}
+        className="mt-5 rounded-md border border-stone-300 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-100 disabled:opacity-60 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+      >
+        {repo.cancel_requested ? 'Stopping…' : 'Cancel setup'}
+      </button>
     </div>
   )
 }

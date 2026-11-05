@@ -16,6 +16,7 @@ export interface Repo {
   progress_total: number | null
   progress_detail: string | null
   phase_elapsed_s: number | null
+  cancel_requested: boolean
 }
 
 export interface Location {
@@ -74,6 +75,13 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
     }).then((r) => json<Repo>(r)),
+  /** Stop setting up a project: a new one is removed, a re-added one keeps its old version. */
+  cancelIndexing: (repoId: number) =>
+    fetch(`/api/repos/${repoId}/cancel`, { method: 'POST' }).then((r) => json<unknown>(r)),
+  removeRepo: async (repoId: number) => {
+    const res = await fetch(`/api/repos/${repoId}`, { method: 'DELETE' })
+    if (!res.ok) await json(res) // throws with the server's message
+  },
   getFile: (repoId: number, path: string) =>
     fetch(`/api/repos/${repoId}/file?path=${encodeURIComponent(path)}`).then((r) =>
       json<{ path: string; content: string }>(r),
