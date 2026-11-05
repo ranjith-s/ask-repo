@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Env and secrets (the test fixture's fake .env is deliberately committed)
+/.env
+backend/.env
+*.pem
+
+# Eval outputs that are not the published baseline
+backend/evals/results/*.local.json
+
+.DS_Store
