@@ -32,8 +32,16 @@ def create_pool(database_url: str) -> ConnectionPool[Connection[DictRow]]:
         connection_class=Connection[DictRow],
         min_size=1,
         max_size=10,
-        kwargs={"row_factory": dict_row},
+        # prepare_threshold=None: no server-side prepared statements. Transaction-mode
+        # poolers (Supabase on port 6543, PgBouncer) hand each transaction to a different
+        # server connection, so a statement prepared on one is missing or duplicated on the
+        # next. Queries here are cheap to plan, so the cost of not preparing is negligible.
+        kwargs={"row_factory": dict_row, "prepare_threshold": None},
         configure=_configure,
+        # Hosted databases close idle connections (Neon suspends after a few idle minutes,
+        # poolers recycle them). Checking a connection before handing it out costs one
+        # round trip and turns "first query after idle fails" into a silent reconnect.
+        check=ConnectionPool.check_connection,
         open=True,
     )
     return pool
