@@ -24,7 +24,8 @@ Open http://localhost:8000, click **Not sure? Try an example project**, and ask 
 once the project is ready (about a minute on CPU).
 
 No Docker, or a hosted database? See [Running without Docker](#running-without-docker) and
-[Using a hosted Postgres](#using-a-hosted-postgres-neon-supabase).
+[Using a hosted Postgres](#using-a-hosted-postgres-neon-supabase). On Windows, see
+[Windows](#windows).
 
 ## Running locally
 
@@ -67,7 +68,7 @@ one, below), plus Python 3.12+ with uv, Node 22, and git (used to clone the repo
    sudo apt install postgresql-16 postgresql-16-pgvector
    ```
 
-   Windows: use WSL2 and follow the Ubuntu steps (`make` is not available in plain PowerShell).
+   Windows: see [Windows](#windows).
 
 2. Create the user and database the app expects by default (on Linux, prefix each with
    `sudo -u postgres`):
@@ -101,6 +102,52 @@ Differences from the Docker setup:
 - **The dev UI proxies `/api` to `127.0.0.1:8000`**, not `localhost`: Node may resolve
   `localhost` to IPv6 first while the backend listens on IPv4, which would make every API
   call fail with a 502.
+
+### Windows
+
+Windows doesn't include `make`, but you only need it for local development:
+
+- **Docker Desktop**: the [Quick start](#quick-start) works as written (use `copy` instead of
+  `cp`). No `make` needed.
+- **WSL2 (recommended for development)**: install Ubuntu from the Microsoft Store and follow
+  this README inside it, including `make` and the Ubuntu steps above.
+- **Git Bash with `make`**: install `make` (for example `choco install make` or
+  `scoop install make`) and run the `make` commands from Git Bash.
+- **Plain PowerShell, no `make`**: run what each target runs, as below. Windows PowerShell 5
+  doesn't support `&&`, so the commands use `;`.
+
+For the database on native Windows, use Docker Desktop for Postgres only
+(`docker compose up -d db`) or a [hosted Postgres](#using-a-hosted-postgres-neon-supabase):
+pgvector has no ready-made Windows installer. You also need
+[Git for Windows](https://git-scm.com/download/win), since the app runs `git` to download projects.
+
+Configure, once:
+```powershell
+copy .env.example .env
+```
+
+Install dependencies, once (`make setup`):
+```powershell
+cd backend; uv sync; cd ..\frontend; npm install; cd ..
+```
+
+Check the database (`make db`):
+```powershell
+cd backend; uv run python -m scripts.ensure_db; cd ..
+```
+
+Start the backend in one terminal (`make api`):
+```powershell
+cd backend; uv run uvicorn app.main:create_app --factory --reload --host 127.0.0.1 --port 8000
+```
+
+Start the frontend in a second terminal (`make web`):
+```powershell
+cd frontend; npm run dev
+```
+
+Then open http://localhost:5173 (`make dev` is these last two together). The tests and evals
+target Linux and macOS (CI runs them on Linux); on Windows, run them in WSL2.
 
 ### Using a hosted Postgres (Neon, Supabase)
 
@@ -494,3 +541,5 @@ JavaScript/TypeScript files that older versions skipped, and applies the newer k
   failed on startup and must be added again.
 - Eval runs index their pinned repos into the app's database (hidden from the UI).
 - Conversations live in the browser tab; reload starts fresh.
+- Native Windows (PowerShell, no WSL2) is supported in the code and covered by tests on Linux,
+  but has not been run on a real Windows machine. Docker Desktop and WSL2 use Linux and are unaffected.
