@@ -43,8 +43,13 @@ export function CodePanel({ repoId, repoUrl, commit, location, onClose }: Props)
   }, [repoId, location.path])
 
   useEffect(() => {
-    const target = scroller.current?.querySelector(`[data-line="${location.start}"]`)
-    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const box = scroller.current
+    const target = box?.querySelector<HTMLElement>(`[data-line="${location.start}"]`)
+    if (!box || !target) return
+    // Smooth-scrolling thousands of pixels through a large file takes seconds; jump instead,
+    // and keep the smooth motion for short moves the reader can follow.
+    const distance = Math.abs(target.getBoundingClientRect().top - box.getBoundingClientRect().top)
+    target.scrollIntoView({ block: 'center', behavior: distance > 2 * box.clientHeight ? 'instant' : 'smooth' })
   }, [file, location.start])
 
   const githubLink =
@@ -111,6 +116,11 @@ export function CodePanel({ repoId, repoUrl, commit, location, onClose }: Props)
 
 function languageFor(path: string): string {
   if (path.endsWith('.py')) return 'python'
+  if (/\.[cm]?ts$/.test(path)) return 'typescript'
+  if (path.endsWith('.tsx')) return 'tsx'
+  if (path.endsWith('.jsx')) return 'jsx'
+  if (/\.[cm]?js$/.test(path)) return 'javascript'
+  if (path.endsWith('.json')) return 'json'
   if (path.endsWith('.md')) return 'markdown'
   if (path.endsWith('.toml') || path.endsWith('.cfg') || path.endsWith('.ini')) return 'ini'
   if (path.endsWith('.yml') || path.endsWith('.yaml')) return 'yaml'

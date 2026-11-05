@@ -78,7 +78,7 @@ export function Sidebar({ repos, selectedId, onSelect, onIndex }: Props) {
           </button>
         )}
         <p className="mt-3 text-xs leading-relaxed text-stone-500">
-          Works with public GitHub projects. Reads Python code, documentation and settings files.
+          Works with public GitHub projects in Python, JavaScript or TypeScript. Also reads documentation and settings files.
         </p>
       </form>
 

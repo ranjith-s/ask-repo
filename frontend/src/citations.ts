@@ -1,7 +1,8 @@
 import type { Citation, Location } from './api'
 
 // Matches the backend's citation format: [path/to/file.py:L10-L25] or [file.py:L7]
-const CITATION = /\[([\w./-]+):L?(\d+)(?:\s*-\s*L?(\d+))?\]/g
+// Paths may contain '@' (monorepo packages such as packages/@scope/name/src/index.ts).
+const CITATION = /\[([\w.@/-]+):L?(\d+)(?:\s*-\s*L?(\d+))?\]/g
 
 /** Rewrite citations into markdown links with a `cite:` scheme the renderer turns into chips. */
 export function linkCitations(markdown: string): string {
