@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     -- `total_with_tax` should outrank one that merely calls it.
     tsv          TSVECTOR GENERATED ALWAYS AS (
                      setweight(to_tsvector('simple', replace(symbol, '.', ' ')), 'A') ||
-                     setweight(to_tsvector('simple', replace(path, '/', ' ')), 'B') ||
+                     setweight(to_tsvector('simple', regexp_replace(path, '[/._-]+', ' ', 'g')), 'B') ||
                      to_tsvector('simple', search_text)
                  ) STORED,
     embedding    VECTOR({dim}) NOT NULL

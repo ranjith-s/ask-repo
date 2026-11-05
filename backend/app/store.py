@@ -13,6 +13,11 @@ from psycopg_pool import ConnectionPool
 from app.ingest.chunker import split_identifier
 from app.models import Chunk, SearchHit, SourceFile
 
+# Tests mention every public name many times, so they crowd out the implementation
+# for "how does X work" questions. Halving their score is a prior, measured in evals.
+TEST_PATH_SQL = r"path ~ '(^|/)tests?/|(^|/)test_[^/]*$|_test\.py$'"
+TEST_PENALTY = 0.5
+_TEST_PATH = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*$|_test\.py$")
 RRF_K = 60  # standard constant from the RRF paper; dampens the impact of top ranks
 _STOPWORDS = frozenset(
     """a an and are as at be by can do does for from how i in is it of on or the this to what when
@@ -128,23 +133,28 @@ class RepoStore:
         tsquery = " | ".join(terms)  # terms are [a-z0-9_] only, safe for to_tsquery
         with self.pool.connection() as conn:
             rows = conn.execute(
-                f"""SELECT {self._HIT_COLUMNS}, ts_rank_cd(tsv, q) AS score
+                f"""SELECT {self._HIT_COLUMNS},
+                           ts_rank_cd(tsv, q, 1) * CASE WHEN {TEST_PATH_SQL} THEN %s ELSE 1 END AS score
                     FROM chunks, to_tsquery('simple', %s) q
                     WHERE repo_id = %s AND tsv @@ q
                     ORDER BY score DESC LIMIT %s""",
-                (tsquery, repo_id, limit),
+                (TEST_PENALTY, tsquery, repo_id, limit),
             ).fetchall()
         return [SearchHit(**r, sources=["keyword"]) for r in rows]
 
     def hybrid_search(self, repo_id: int, question: str, query_vec: np.ndarray, limit: int) -> list[SearchHit]:
         pool_size = max(limit * 4, 30)
-        return rrf_fuse(
+        fused = rrf_fuse(
             {
                 "vector": self.vector_search(repo_id, query_vec, pool_size),
                 "keyword": self.keyword_search(repo_id, question, pool_size),
             },
-            limit,
+            limit=pool_size,
         )
+        for hit in fused:
+            if _TEST_PATH.search(hit.path):
+                hit.score *= TEST_PENALTY
+        return sorted(fused, key=lambda h: h.score, reverse=True)[:limit]
 
     # ---- file access (agent tools, code viewer) ------------------------------
     def list_paths(self, repo_id: int, prefix: str = "") -> list[str]:

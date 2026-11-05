@@ -174,6 +174,7 @@ def _windows(start: int, end: int, size: int, overlap: int) -> list[tuple[int, i
 
 
 _IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_PUNCT = re.compile(r"[./:\-]+")
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 
@@ -188,8 +189,10 @@ def search_text(chunk: Chunk) -> str:
     so a question about 'url path' still matches `url_path_for`."""
     idents = set(_IDENT.findall(chunk.symbol + " " + chunk.content))
     extra = {part.lower() for ident in idents for part in split_identifier(ident)}
-    path_terms = re.split(r"[/._-]+", chunk.path)
-    return " ".join([chunk.path, *path_terms, chunk.symbol, chunk.content, *sorted(extra)])
+    # Postgres' parser reads `routing.py` or `a.b-c` as single file/host tokens, which
+    # then never match a question. Breaking on punctuation keeps the words searchable.
+    text = _PUNCT.sub(" ", " ".join([chunk.path, chunk.symbol, chunk.content]))
+    return " ".join([text, *sorted(extra)])
 
 
 def embedding_text(chunk: Chunk, max_chars: int = 2000) -> str:
