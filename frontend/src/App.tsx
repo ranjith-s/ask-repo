@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, BUSY_STATUSES, type Location, type Mode, type Repo, type ServerConfig } from './api'
 import { AnswerCard, type Turn } from './components/AnswerCard'
 import { CodePanel } from './components/CodePanel'
+import { ProgressBar } from './components/ProgressBar'
 import { Sidebar } from './components/Sidebar'
+import { embeddingProgress, formatTimeLeft } from './progress'
 
 const PROVIDER_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', ollama: 'Ollama' }
 
@@ -235,6 +237,7 @@ function IndexingState({ repo }: { repo: Repo }) {
   }
   const steps: Repo['status'][] = ['cloning', 'parsing', 'embedding']
   const current = steps.indexOf(repo.status)
+  const progress = embeddingProgress(repo)
   return (
     <div className="pt-16 text-center">
       <Loader2 className="mx-auto size-6 animate-spin text-indigo-500" />
@@ -246,7 +249,19 @@ function IndexingState({ repo }: { repo: Repo }) {
           </li>
         ))}
       </ol>
-      <p className="mt-3 text-xs text-stone-500">Embedding runs on CPU; a mid-sized repo takes about a minute.</p>
+      {progress ? (
+        <div className="mx-auto mt-5 max-w-sm">
+          <ProgressBar percent={progress.percent} label={`Embedding ${repo.name}`} />
+          <p className="mt-2 flex justify-between text-xs text-stone-500 tabular-nums">
+            <span>
+              {progress.percent}% · {progress.done.toLocaleString()} of {progress.total.toLocaleString()} chunks
+            </span>
+            <span>{formatTimeLeft(progress.secondsLeft)}</span>
+          </p>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-stone-500">Embedding runs on CPU; a mid-sized repo takes about a minute.</p>
+      )}
     </div>
   )
 }

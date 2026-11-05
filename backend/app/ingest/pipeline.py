@@ -4,6 +4,8 @@ import tempfile
 import time
 from pathlib import Path
 
+import numpy as np
+
 from app.config import Settings
 from app.embeddings import Embedder
 from app.ingest.chunker import chunk_file, embedding_text, search_text
@@ -13,10 +15,20 @@ from app.store import RepoStore
 
 
 class IngestionPipeline:
-    def __init__(self, store: RepoStore, embedder: Embedder, settings: Settings) -> None:
+    def __init__(self, store: RepoStore, embedder: Embedder, settings: Settings, embed_batch_size: int = 128) -> None:
         self.store = store
         self.embedder = embedder
         self.settings = settings
+        # Progress is written after each batch: frequent enough for a smooth bar (a batch
+        # takes ~1-3 s on CPU), rare enough not to load a hosted database.
+        self.embed_batch_size = embed_batch_size
+
+    def _embed_with_progress(self, repo_id: int, texts: list[str]) -> list[np.ndarray]:
+        embeddings: list[np.ndarray] = []
+        for start in range(0, len(texts), self.embed_batch_size):
+            embeddings.extend(self.embedder.embed_documents(texts[start : start + self.embed_batch_size]))
+            self.store.set_embedding_progress(repo_id, len(embeddings))
+        return embeddings
 
     def run(self, repo_id: int, url: str, local_path: Path | None = None) -> None:
         """Index a repo. `local_path` skips the clone (used by tests and evals)."""
@@ -36,8 +48,8 @@ class IngestionPipeline:
                 if not chunks:
                     raise ValueError("No indexable files found (Python, Markdown or config)")
 
-                self.store.set_status(repo_id, "embedding", file_count=len(files), chunk_count=len(chunks))
-                embeddings = self.embedder.embed_documents([embedding_text(c) for c in chunks])
+                self.store.start_embedding(repo_id, file_count=len(files), chunk_count=len(chunks))
+                embeddings = self._embed_with_progress(repo_id, [embedding_text(c) for c in chunks])
 
                 self.store.replace_contents(repo_id, files, chunks, [search_text(c) for c in chunks], embeddings)
                 self.store.set_status(repo_id, "ready", commit_sha=commit)

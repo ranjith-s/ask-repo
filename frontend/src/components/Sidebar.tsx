@@ -1,6 +1,8 @@
 import { AlertCircle, CheckCircle2, GitBranch, Loader2, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { BUSY_STATUSES, type Repo } from '../api'
+import { embeddingProgress } from '../progress'
+import { ProgressBar } from './ProgressBar'
 
 const STATUS_LABEL: Record<Repo['status'], string> = {
   pending: 'Queued',
@@ -83,6 +85,7 @@ export function Sidebar({ repos, selectedId, onSelect, onIndex }: Props) {
       <nav className="flex-1 overflow-y-auto p-2" aria-label="Repositories">
         {repos.map((repo) => {
           const busy = BUSY_STATUSES.includes(repo.status)
+          const progress = embeddingProgress(repo)
           const active = repo.id === selectedId
           return (
             <button
@@ -101,12 +104,14 @@ export function Sidebar({ repos, selectedId, onSelect, onIndex }: Props) {
                 {repo.status === 'ready' && <CheckCircle2 className="size-3 text-emerald-500" />}
                 {repo.status === 'failed' && <AlertCircle className="size-3 text-red-500" />}
                 <span>{STATUS_LABEL[repo.status]}</span>
+                {progress && <span className="tabular-nums">{progress.percent}%</span>}
                 {repo.status === 'ready' && (
                   <span className="text-stone-400">
                     · {repo.file_count} files · {repo.chunk_count.toLocaleString()} chunks
                   </span>
                 )}
               </div>
+              {progress && <ProgressBar percent={progress.percent} label={`Embedding ${repo.name}`} className="mt-1.5 ml-5.5" />}
               {repo.status === 'failed' && repo.error && (
                 <p className="mt-1 pl-5.5 text-xs text-red-600">{repo.error}</p>
               )}

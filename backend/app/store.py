@@ -75,6 +75,20 @@ class RepoStore:
                 {"status": status, "error": error, "id": repo_id, **fields},
             )
 
+    def start_embedding(self, repo_id: int, file_count: int, chunk_count: int) -> None:
+        """Enter the embedding phase; the start time uses the DB clock, like the elapsed time."""
+        with self.pool.connection() as conn:
+            conn.execute(
+                """UPDATE repos SET status = 'embedding', error = NULL, file_count = %s, chunk_count = %s,
+                                    embedded_count = 0, embedding_started_at = now()
+                   WHERE id = %s""",
+                (file_count, chunk_count, repo_id),
+            )
+
+    def set_embedding_progress(self, repo_id: int, embedded: int) -> None:
+        with self.pool.connection() as conn:
+            conn.execute("UPDATE repos SET embedded_count = %s WHERE id = %s", (embedded, repo_id))
+
     def fail_interrupted(self) -> int:
         """Ingestion runs in-process, so any repo still 'busy' at startup was interrupted."""
         with self.pool.connection() as conn:
@@ -84,13 +98,19 @@ class RepoStore:
             )
             return cur.rowcount
 
+    # Elapsed embedding time is computed by the database, so a client or app server whose
+    # clock differs from a hosted database's still gets a correct time-remaining estimate.
+    _REPO_COLUMNS = """*, CASE WHEN status = 'embedding' AND embedding_started_at IS NOT NULL
+                       THEN round(extract(epoch FROM now() - embedding_started_at)::numeric, 1)::float
+                  END AS embedding_elapsed_s"""
+
     def list_repos(self) -> list[dict[str, Any]]:
         with self.pool.connection() as conn:
-            return conn.execute("SELECT * FROM repos ORDER BY created_at DESC").fetchall()
+            return conn.execute(f"SELECT {self._REPO_COLUMNS} FROM repos ORDER BY created_at DESC").fetchall()
 
     def get_repo(self, repo_id: int) -> dict[str, Any] | None:
         with self.pool.connection() as conn:
-            return conn.execute("SELECT * FROM repos WHERE id = %s", (repo_id,)).fetchone()
+            return conn.execute(f"SELECT {self._REPO_COLUMNS} FROM repos WHERE id = %s", (repo_id,)).fetchone()
 
     def find_repo_by_url(self, url: str) -> dict[str, Any] | None:
         with self.pool.connection() as conn:

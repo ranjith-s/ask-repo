@@ -66,3 +66,7 @@ ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS provider TEXT;
 ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS model TEXT;
 ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS cache_read_tokens INT NOT NULL DEFAULT 0;
 ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS cache_write_tokens INT NOT NULL DEFAULT 0;
+
+-- Embedding progress, for the progress bar while a repo is being indexed.
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS embedded_count INT NOT NULL DEFAULT 0;
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS embedding_started_at TIMESTAMPTZ;

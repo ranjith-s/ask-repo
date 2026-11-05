@@ -141,7 +141,8 @@ Things to know:
 1. **Index**: paste a GitHub URL. The repo is shallow-cloned and Python files are
    split along their syntax tree (functions, methods, class and module outlines).
    Markdown and config files are split by heading or line window. Chunks are embedded
-   on CPU and stored in Postgres with a full-text index.
+   on CPU, in batches, with live progress (percentage, chunks done, time left), and stored
+   in Postgres with a full-text index.
 2. **Ask** in one of two modes:
    - **Deep**: an agent with four read-only tools (`search_code`, `grep`, `read_file`,
      `list_files`) explores until it has evidence, then answers. The steps stream live.
