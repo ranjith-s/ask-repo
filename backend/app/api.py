@@ -5,19 +5,19 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.agent.runner import HistoryTurn, QuestionAnswerer
 from app.config import Settings
 from app.ingest.pipeline import IngestionPipeline
 from app.ingest.source import InvalidRepoUrl, parse_github_url
-from app.store import RepoStore
+from app.store import BUSY_STATUSES, RepoStore
 
 router = APIRouter(prefix="/api")
 
 # Repos in these states are still being indexed.
-BUSY = {"pending", "cloning", "parsing", "embedding"}
+BUSY = set(BUSY_STATUSES)
 
 
 def get_store(request: Request) -> RepoStore:
@@ -83,6 +83,26 @@ def index_repo(body: IndexRequest, background: BackgroundTasks, request: Request
     repo = store.get_repo(repo_id)
     assert repo is not None
     return _public(repo)
+
+
+@router.post("/repos/{repo_id}/cancel", status_code=202)
+def cancel_indexing(repo_id: int, store: StoreDep) -> dict[str, Any]:
+    """Stop setting up a project. A new project is removed; a re-added one keeps its old index."""
+    if store.get_repo(repo_id) is None:
+        raise HTTPException(404, "Project not found")
+    if not store.request_cancel(repo_id):
+        raise HTTPException(409, "This project isn't being set up, so there is nothing to cancel.")
+    repo = store.get_repo(repo_id)
+    return _public(repo) if repo else {"id": repo_id, "status": "removed"}
+
+
+@router.delete("/repos/{repo_id}", status_code=204)
+def remove_repo(repo_id: int, store: StoreDep) -> Response:
+    if store.get_repo(repo_id) is None:
+        raise HTTPException(404, "Project not found")
+    if not store.delete_repo(repo_id):
+        raise HTTPException(409, "This project is still being set up. Cancel it first, then remove it.")
+    return Response(status_code=204)
 
 
 @router.get("/repos/{repo_id}/file")

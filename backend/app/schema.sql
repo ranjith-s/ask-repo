@@ -97,3 +97,6 @@ BEGIN
         CREATE INDEX IF NOT EXISTS chunks_tsv_idx ON chunks USING GIN (tsv);
     END IF;
 END $$;
+
+-- Set when someone cancels setting up a project; the indexing pipeline checks it as it works.
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT false;

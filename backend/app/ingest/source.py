@@ -6,6 +6,7 @@ import re
 import signal
 import subprocess
 import threading
+import time
 from collections import deque
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -155,22 +156,45 @@ def kill_process_tree(proc: "subprocess.Popen[bytes]", windows: bool = os.name =
         os.killpg(proc.pid, signal.SIGKILL)
 
 
-def shallow_clone(url: str, dest: Path, timeout_s: int, on_progress: CloneProgress | None = None) -> str:
-    """Clone the default branch at depth 1, reporting progress, and return the commit SHA."""
+class CloneCancelled(Exception):
+    """The clone was stopped because someone cancelled setting up the project."""
+
+
+def shallow_clone(
+    url: str,
+    dest: Path,
+    timeout_s: int,
+    on_progress: CloneProgress | None = None,
+    should_stop: Callable[[], bool] | None = None,
+) -> str:
+    """Clone the default branch at depth 1, reporting progress, and return the commit SHA.
+
+    Raises CloneCancelled if `should_stop` returns True, TimeoutExpired after `timeout_s`.
+    """
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_LFS_SKIP_SMUDGE": "1"}
     cmd = ["git", "clone", "--progress", "--depth", "1", "--single-branch", "--no-tags", url, str(dest)]
     # Own process group (POSIX; Windows ignores this): git spawns helpers (git-remote-https,
-    # index-pack) that inherit the stderr pipe, so the whole tree must be stopped on timeout.
+    # index-pack) that inherit the stderr pipe, so the whole tree must be stopped.
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env, start_new_session=True)
     assert proc.stderr is not None
-    timed_out = threading.Event()
+    timed_out, cancelled, finished = threading.Event(), threading.Event(), threading.Event()
 
-    def kill() -> None:  # a timer, because a stalled git prints nothing we could react to
-        timed_out.set()
-        kill_process_tree(proc)
+    def watch() -> None:
+        """Stop git on timeout or cancel. A thread, not the output loop: a stalled git prints
+        nothing, so the loop below may be blocked waiting for output when either happens."""
+        deadline = time.monotonic() + timeout_s
+        while not finished.wait(0.25):
+            if time.monotonic() > deadline:
+                timed_out.set()
+            elif should_stop is not None and should_stop():
+                cancelled.set()
+            else:
+                continue
+            kill_process_tree(proc)
+            return
 
-    timer = threading.Timer(timeout_s, kill)
-    timer.start()
+    watcher = threading.Thread(target=watch, name="clone-watcher", daemon=True)
+    watcher.start()
     tail: deque[str] = deque(maxlen=20)  # last lines, for the error message
     try:
         for line in _lines(proc.stderr):
@@ -179,8 +203,11 @@ def shallow_clone(url: str, dest: Path, timeout_s: int, on_progress: CloneProgre
                 on_progress(*progress)
         proc.wait()
     finally:
-        timer.cancel()
+        finished.set()
+        watcher.join()
         proc.stderr.close()
+    if cancelled.is_set():
+        raise CloneCancelled(url)
     if timed_out.is_set():
         raise subprocess.TimeoutExpired(cmd, timeout_s)
     if proc.returncode:

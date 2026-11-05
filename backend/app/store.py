@@ -17,6 +17,8 @@ from app.models import Chunk, SearchHit, SourceFile
 # Tests mention every public name many times, so they crowd out the implementation
 # for "how does X work" questions. Halving their score is a prior, measured in evals.
 TEST_PENALTY = 0.5
+# A project in one of these states is being set up by a background task.
+BUSY_STATUSES = ("pending", "cloning", "parsing", "embedding")
 RRF_K = 60  # standard constant from the RRF paper; dampens the impact of top ranks
 _STOPWORDS = frozenset(
     """a an and are as at be by can do does for from how i in is it of on or the this to what when
@@ -57,7 +59,7 @@ class RepoStore:
         with self.pool.connection() as conn:
             row = conn.execute(
                 """INSERT INTO repos (url, name, status) VALUES (%s, %s, 'pending')
-                   ON CONFLICT (url) DO UPDATE SET status = 'pending', error = NULL,
+                   ON CONFLICT (url) DO UPDATE SET status = 'pending', error = NULL, cancel_requested = false,
                        progress_done = 0, progress_total = NULL, progress_detail = NULL
                    RETURNING id""",
                 (url, name),
@@ -99,11 +101,62 @@ class RepoStore:
         """Ingestion runs in-process, so any repo still 'busy' at startup was interrupted."""
         with self.pool.connection() as conn:
             cur = conn.execute(
-                """UPDATE repos SET status = 'failed', error = %s
-                   WHERE status IN ('pending', 'cloning', 'parsing', 'embedding')""",
-                ("Setup was interrupted because the server restarted. Please add the project again.",),
+                """UPDATE repos SET status = 'failed', error = %s, cancel_requested = false
+                   WHERE status = ANY(%s)""",
+                (
+                    "Setup was interrupted because the server restarted. Please add the project again.",
+                    list(BUSY_STATUSES),
+                ),
             )
             return cur.rowcount
+
+    # ---- cancelling and removing ------------------------------------------------------
+    def request_cancel(self, repo_id: int) -> bool:
+        """Ask the background task to stop. False if the project isn't being set up."""
+        with self.pool.connection() as conn:
+            row = conn.execute(
+                "UPDATE repos SET cancel_requested = true WHERE id = %s AND status = ANY(%s) RETURNING id",
+                (repo_id, list(BUSY_STATUSES)),
+            ).fetchone()
+        return row is not None
+
+    def is_cancel_requested(self, repo_id: int) -> bool:
+        with self.pool.connection() as conn:
+            row = conn.execute("SELECT cancel_requested FROM repos WHERE id = %s", (repo_id,)).fetchone()
+        return row is None or bool(row["cancel_requested"])  # a removed project counts as cancelled
+
+    def finish_cancel(self, repo_id: int) -> str:
+        """Undo a cancelled setup. A project with an earlier index (it was being re-added) goes
+        back to it, untouched because the index is only replaced at the very end; a new project
+        is removed. Returns "restored" or "removed"."""
+        with self.pool.connection() as conn, conn.transaction():
+            counts = conn.execute(
+                """SELECT (SELECT count(*) FROM files WHERE repo_id = %(id)s) AS files,
+                          (SELECT count(*) FROM chunks WHERE repo_id = %(id)s) AS chunks""",
+                {"id": repo_id},
+            ).fetchone()
+            assert counts is not None
+            if counts["files"] == 0:
+                conn.execute("DELETE FROM repos WHERE id = %s", (repo_id,))
+                return "removed"
+            conn.execute(
+                """UPDATE repos SET status = 'ready', error = NULL, cancel_requested = false,
+                                     file_count = %s, chunk_count = %s, progress_done = 0,
+                                     progress_total = NULL, progress_detail = NULL
+                   WHERE id = %s""",
+                (counts["files"], counts["chunks"], repo_id),
+            )
+            return "restored"
+
+    def delete_repo(self, repo_id: int) -> bool:
+        """Remove a project and its files and sections (query logs keep their rows).
+        Refused while it is being set up: cancel first, so no half-finished task writes to it."""
+        with self.pool.connection() as conn:
+            row = conn.execute(
+                "DELETE FROM repos WHERE id = %s AND NOT (status = ANY(%s)) RETURNING id",
+                (repo_id, list(BUSY_STATUSES)),
+            ).fetchone()
+        return row is not None
 
     # Elapsed phase time is computed by the database, so a client or app server whose
     # clock differs from a hosted database's still gets a correct time-remaining estimate.
