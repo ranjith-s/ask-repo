@@ -1,0 +1,148 @@
+# Ask Repo
+
+Ask questions about any public Python repository on GitHub and get answers that
+**cite the exact file and lines**, with every citation checked against what the
+model actually read.
+
+<!-- Add screenshots: docs/screenshots/answer.png, docs/screenshots/source-viewer.png -->
+
+## Quick start
+
+Requires Docker and an [Anthropic API key](https://console.anthropic.com/).
+
+```bash
+cp .env.example .env        # then set ANTHROPIC_API_KEY
+docker compose up --build   # first build downloads the embedding model (~130 MB)
+```
+
+Open http://localhost:8000, click **Try it with encode/starlette**, and ask a question
+once indexing finishes (about a minute on CPU).
+
+### Local development
+
+```bash
+make db          # Postgres + pgvector in Docker
+make dev         # API on :8000 (reload) and Vite on :5173
+make test        # backend tests against the real database
+make lint        # ruff, mypy, tsc
+make eval        # retrieval eval, no API key needed
+```
+
+Backend: Python 3.12 with [uv](https://docs.astral.sh/uv/). Frontend: Node 22.
+
+## What it does
+
+1. **Index**: paste a GitHub URL. The repo is shallow-cloned and Python files are
+   split along their syntax tree (functions, methods, class and module outlines).
+   Markdown and config files are split by heading or line window. Chunks are embedded
+   on CPU and stored in Postgres with a full-text index.
+2. **Ask** in one of two modes:
+   - **Deep**: an agent with four read-only tools (`search_code`, `grep`, `read_file`,
+     `list_files`) explores until it has evidence, then answers. The steps stream live.
+   - **Quick**: one hybrid retrieval, one model call. Cheaper and faster.
+3. **Verify**: every `[path:Lx-Ly]` citation is checked: does the range exist, and
+   was the model actually shown those lines? Unverified citations are flagged amber.
+   Clicking a citation opens the source with the lines highlighted.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    UI["React + Vite<br/>(served by FastAPI)"] -- "REST + SSE" --> API[FastAPI]
+    API -- "background task" --> ING["Ingestion<br/>clone → AST chunk → embed"]
+    ING --> PG[("Postgres<br/>pgvector + full-text<br/>files · chunks · query_logs")]
+    API --> QA["QuestionAnswerer<br/>quick | deep"]
+    QA -- "tools: search_code · grep<br/>read_file · list_files" --> PG
+    QA -- "streaming, tool use" --> LLM["Claude API"]
+    QA --> CIT["Citation checker<br/>valid · grounded"]
+```
+
+| Path | Responsibility |
+|------|----------------|
+| `backend/app/ingest/` | `source.py` (URL validation, clone, file filter), `chunker.py` (AST chunking), `pipeline.py` |
+| `backend/app/store.py` | All SQL: vector, keyword, hybrid (RRF), grep, file access, query logs |
+| `backend/app/agent/` | `runner.py` (both modes), `tools.py`, `prompts.py`, `llm.py` (SDK wrapper), `citations.py` |
+| `backend/app/api.py` | HTTP routes; answers stream as server-sent events |
+| `backend/evals/` | Pinned Starlette eval set, retrieval eval, answer eval |
+| `frontend/src/` | `App.tsx`, `components/`, `api.ts` (the only module that calls the backend) |
+
+## Evaluation
+
+`backend/evals/starlette.yaml` has 22 questions about `encode/starlette` pinned to one
+commit, in five categories: concept, lookup, location, dependencies, and negative
+(not answerable from the repo).
+
+- `make eval`: **retrieval**. hit@5 and MRR for vector, keyword and hybrid search. No API key.
+- `make eval-answers`: **answers**. Runs the real agent and scores whether answers cite an
+  expected file, citation validity and grounding, declines on negative questions,
+  steps, latency and cost.
+
+Ranking changes were made one at a time and measured; see [`docs/eval-log.md`](docs/eval-log.md).
+
+<!-- AUTHOR: paste your fastembed `make eval` and `make eval-answers` numbers here -->
+
+---
+
+<!--
+  The sections below are for the author's own reasoning. The notes inside each
+  are raw material from the build, not final text. Rewrite in your own words.
+-->
+
+## RAG / LLM approach and decisions <!-- AUTHOR -->
+
+> _Notes to draw on (delete when written):_ see `docs/decisions.md` for each choice and
+> its alternatives. Points worth explaining in your words:
+> - Why split code along the AST, and why the class/module **outlines** exist.
+> - Why hybrid search: embeddings miss exact identifiers, keyword search misses paraphrase.
+>   What `docs/eval-log.md` showed (tests crowding out implementations; the tokenizer bug).
+> - Why an agent for deep mode *and* a quick mode as the baseline.
+> - Context management: history keeps only Q&A text, tool output is truncated, the step cap
+>   and the final no-tools turn, prompt caching of tools + system prompt.
+> - Guardrails: read-only tools, DB-only paths, URL allow-list, prompt-injection notice,
+>   and the citation **grounding** check as a deterministic quality signal.
+> - Observability: request IDs, JSON logs, `query_logs` with steps/tokens/cost/latency.
+
+## Key technical decisions <!-- AUTHOR -->
+
+## Productionizing and scaling on a hyperscaler <!-- AUTHOR -->
+
+> _Notes:_ stateless API container (Cloud Run / ECS Fargate / Container Apps);
+> managed Postgres with pgvector (Cloud SQL / RDS / Azure Flexible Server);
+> ingestion moved to a queue + worker (Pub/Sub, SQS) with per-repo limits;
+> secrets in Secret Manager / Secrets Manager with rotation; auth (OIDC) and per-user
+> rate limits; private repos via a GitHub App; incremental re-indexing on push webhooks;
+> OpenTelemetry traces to a backend; eval run in CI on every retrieval/prompt change;
+> HNSW tuning and partitioning chunks by repo at scale; cost controls (Sonnet/Haiku for
+> quick mode, effort tuning, prompt caching hit rate).
+
+## Engineering standards followed (and skipped) <!-- AUTHOR -->
+
+> _Notes:_ followed: typed Python (mypy), ruff, tests against a real Postgres, agent tests
+> with a scripted LLM, 12-factor config, structured logs, small commits, CI, one-command
+> start. Skipped: frontend tests, auth, migrations tool (schema is idempotent SQL),
+> load testing, SAST/DAST in CI.
+
+## How I used AI tools <!-- AUTHOR -->
+
+> _Notes:_ `CLAUDE.md` holds the conventions the assistant must follow. Examples from
+> this build where review mattered:
+> - The assistant's first RRF test asserted an order between two items with equal scores.
+> - Grounding was first too generous: a search hit on a module *outline* marked the whole
+>   file as seen. Fixed so only lines actually shown count.
+> - A React effect returned `scrollIntoView()`'s Promise, which newer Chromium returns,
+>   and blanked the page. It was found by driving the UI with Playwright, not by reading code.
+> - Ranking changes were accepted only with eval numbers.
+
+## What I'd do with more time <!-- AUTHOR -->
+
+> _Notes:_ tree-sitter for more languages; code-specific embedding model, A/B'd with the eval;
+> cross-encoder reranker; call-graph tool ("who calls X"); LLM-judge for answer correctness;
+> incremental indexing; frontend tests; OpenTelemetry; MCP server exposing the same tools to
+> Claude Code / Cursor.
+
+## Known limitations
+
+- Public GitHub repositories only, default branch, up to 3,000 files of 300 KB each.
+- Python gets structure-aware chunking; other languages are not indexed.
+- Ingestion runs in the API process. If the server restarts mid-index, the repo is marked failed on startup and must be added again.
+- Conversations live in the browser tab; reload starts fresh.
