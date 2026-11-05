@@ -215,6 +215,9 @@ Things to know:
    outline of every file and class. Sections are embedded on CPU in batches and stored in
    Postgres with a full-text index. Each step shows live progress: download percentage and
    size, files read (and the current file), and sections made searchable with time left.
+   **Cancel setup** stops it at any point: a new project is removed, and a project you were
+   adding again keeps its previous version. To delete a project and everything indexed for
+   it, use the bin icon on its row (it asks for confirmation; question logs are kept).
 2. **Ask** in one of two modes:
    - **Thorough** (`deep` in the API): an agent with four read-only tools (`search_code`,
      `grep`, `read_file`, `list_files`) explores until it has evidence, then answers. The
@@ -444,6 +447,7 @@ made one at a time and measured (on all three sets since JS/TS support was added
 | Every API call fails with 502 in `make dev` | Something else is on port 8000, or the backend isn't running |
 | "pgvector extension is not installed" at startup | Install pgvector, or use the Docker or a hosted database |
 | "Setup was interrupted" on a project | The server restarted while it was being added; add it again |
+| Can't remove a project that is being set up | Cancel setup first (the × on its row), then remove it |
 | A JS/TS project only answers from its docs | It was added before JS/TS support, when code files were skipped; add it again |
 
 ## Upgrading an existing install
