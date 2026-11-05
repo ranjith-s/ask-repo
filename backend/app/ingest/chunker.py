@@ -16,6 +16,13 @@ WINDOW_OVERLAP = 10
 
 
 def chunk_file(file: SourceFile) -> list[Chunk]:
+    from app.ingest.script_chunker import ScriptChunker, language_for  # tree-sitter loads lazily
+
+    if (language := language_for(file.path)) is not None:
+        try:
+            return ScriptChunker(file, language).chunks()
+        except (ValueError, RecursionError):
+            return _window_chunks(file, kind="text", symbol=file.path)
     if file.path.endswith(".py"):
         try:
             return PythonChunker(file).chunks()
@@ -124,7 +131,7 @@ class PythonChunker:
             start, end = group[0].lineno, group[-1].end_lineno or group[-1].lineno
             if end - start < 1 and len(self.lines[start - 1]) < 40:
                 continue  # skip trivial one-liners
-            out.append(Chunk(self.file.path, f"{self.module}:{start}", "code", start, end, self._segment(start, end)))
+            out.append(Chunk(self.file.path, f"@{start}", "code", start, end, self._segment(start, end)))
         return out
 
 
@@ -193,6 +200,23 @@ def search_text(chunk: Chunk) -> str:
     # then never match a question. Breaking on punctuation keeps the words searchable.
     text = _PUNCT.sub(" ", " ".join([chunk.path, chunk.symbol, chunk.content]))
     return " ".join([text, *sorted(extra)])
+
+
+def symbol_terms(chunk: Chunk) -> str:
+    """The words of a chunk's name, for the highest keyword weight.
+
+    camelCase is split here because Postgres only splits snake_case by itself: without this,
+    `normalizeRequestMethod` would be one opaque token while `normalize_request_method` gets
+    three useful words. Loose code (named by line) and tests get no name weight: a test title
+    like "retries without the computed delay" describes a check, not where the code lives.
+    """
+    from app.ingest.source import is_test_path
+
+    if chunk.kind == "code" or is_test_path(chunk.path):
+        return ""
+    words = [w for w in re.split(r"[^A-Za-z0-9_]+", chunk.symbol) if w]
+    parts = {p.lower() for w in words for p in split_identifier(w)}
+    return " ".join([*words, *sorted(parts)])
 
 
 def embedding_text(chunk: Chunk, max_chars: int = 2000) -> str:

@@ -1,0 +1,6 @@
+{
+  "name": "sample-shop",
+  "version": "1.0.0",
+  "dependencies": { "express": "^5.0.0", "zod": "^3.23.0" },
+  "devDependencies": { "typescript": "^5.6.0" }
+}

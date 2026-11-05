@@ -64,3 +64,9 @@ def test_startup_marks_interrupted_indexing_as_failed(settings, embedder, store)
     with TestClient(create_app(settings, embedder=embedder, llm=ScriptedLLM([]))):
         repo = store.get_repo(repo_id)
     assert repo is not None and repo["status"] == "failed" and "interrupted" in repo["error"]
+
+
+def test_eval_checkouts_are_not_listed(client, store):
+    store.upsert_repo("eval://encode/starlette@0f08970e5cce/hash", "encode/starlette (eval)")
+    names = [r["name"] for r in client.get("/api/repos").json()]
+    assert "encode/starlette (eval)" not in names

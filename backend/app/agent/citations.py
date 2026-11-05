@@ -9,7 +9,8 @@ from dataclasses import asdict, dataclass
 
 from app.agent.tools import SeenLines
 
-CITATION = re.compile(r"\[([\w./-]+\.?\w*):L?(\d+)(?:\s*-\s*L?(\d+))?\]")
+# Paths may contain '@' (monorepo packages such as packages/@scope/name/src/index.ts).
+CITATION = re.compile(r"\[([\w.@/-]+):L?(\d+)(?:\s*-\s*L?(\d+))?\]")
 
 
 @dataclass

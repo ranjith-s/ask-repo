@@ -97,3 +97,11 @@ def test_citations_valid_and_grounded():
 def test_repo_map_summarises_directories():
     text = repo_map(["README.md", "pkg/a.py", "pkg/sub/b.py", "pkg/sub/c.py"])
     assert "pkg/ (3 files)" in text and "pkg/sub/ (2 files)" in text and "README.md" in text
+
+
+def test_citations_accept_monorepo_paths_with_at_signs():
+    seen = SeenLines()
+    seen.add("packages/@acme/ui/src/Button.tsx", 1, 40)
+    answer = "Rendered in [packages/@acme/ui/src/Button.tsx:L10-L20]."
+    (cite,) = check_citations(answer, {"packages/@acme/ui/src/Button.tsx": 50}, seen)
+    assert cite.path == "packages/@acme/ui/src/Button.tsx" and cite.valid and cite.grounded

@@ -32,10 +32,11 @@ CREATE TABLE IF NOT EXISTS chunks (
     end_line     INT NOT NULL,
     content      TEXT NOT NULL,
     search_text  TEXT NOT NULL,
+    symbol_terms TEXT NOT NULL DEFAULT '',
     -- Symbol names weigh most, then paths, then body text: a chunk that *defines*
     -- `total_with_tax` should outrank one that merely calls it.
     tsv          TSVECTOR GENERATED ALWAYS AS (
-                     setweight(to_tsvector('simple', replace(symbol, '.', ' ')), 'A') ||
+                     setweight(to_tsvector('simple', symbol_terms), 'A') ||
                      setweight(to_tsvector('simple', regexp_replace(path, '[/._-]+', ' ', 'g')), 'B') ||
                      to_tsvector('simple', search_text)
                  ) STORED,
@@ -75,3 +76,24 @@ ALTER TABLE repos ADD COLUMN IF NOT EXISTS phase_started_at TIMESTAMPTZ;
 -- Superseded by the generic columns above (embedding-only, from an earlier version).
 ALTER TABLE repos DROP COLUMN IF EXISTS embedded_count;
 ALTER TABLE repos DROP COLUMN IF EXISTS embedding_started_at;
+
+-- Name words (symbol_terms) replaced the raw symbol as the top-weighted keyword field, so
+-- camelCase names get the same boost as snake_case ones. Databases created before that keep
+-- the old generated column until this rebuilds it; repos indexed earlier gain the boost when
+-- they are added again.
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS symbol_terms TEXT NOT NULL DEFAULT '';
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'chunks' AND column_name = 'tsv' AND generation_expression LIKE '%symbol_terms%'
+    ) THEN
+        ALTER TABLE chunks DROP COLUMN IF EXISTS tsv;
+        ALTER TABLE chunks ADD COLUMN tsv TSVECTOR GENERATED ALWAYS AS (
+            setweight(to_tsvector('simple', symbol_terms), 'A') ||
+            setweight(to_tsvector('simple', regexp_replace(path, '[/._-]+', ' ', 'g')), 'B') ||
+            to_tsvector('simple', search_text)
+        ) STORED;
+        CREATE INDEX IF NOT EXISTS chunks_tsv_idx ON chunks USING GIN (tsv);
+    END IF;
+END $$;

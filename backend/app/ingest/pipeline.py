@@ -9,7 +9,7 @@ import numpy as np
 
 from app.config import Settings
 from app.embeddings import Embedder
-from app.ingest.chunker import chunk_file, embedding_text, search_text
+from app.ingest.chunker import chunk_file, embedding_text, search_text, symbol_terms
 from app.ingest.source import candidate_paths, read_source, shallow_clone
 from app.models import Chunk, SourceFile
 from app.observability import log
@@ -80,13 +80,22 @@ class IngestionPipeline:
 
                 files, chunks = self._parse(root, progress)
                 if not chunks:
-                    raise ValueError("This project has no Python code or documentation to read.")
+                    raise ValueError(
+                        "This project has no Python, JavaScript or TypeScript code or documentation to read."
+                    )
 
                 progress.start_phase("embedding", total=len(chunks), file_count=len(files), chunk_count=len(chunks))
                 embeddings = self._embed([embedding_text(c) for c in chunks], progress)
 
                 progress.report(len(chunks), len(chunks), "Saving", force=True)
-                self.store.replace_contents(repo_id, files, chunks, [search_text(c) for c in chunks], embeddings)
+                self.store.replace_contents(
+                    repo_id,
+                    files,
+                    chunks,
+                    [search_text(c) for c in chunks],
+                    embeddings,
+                    [symbol_terms(c) for c in chunks],
+                )
                 self.store.set_status(repo_id, "ready", commit_sha=commit)
                 bound.info(
                     "ingest.done",

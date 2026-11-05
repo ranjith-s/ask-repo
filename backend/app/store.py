@@ -11,13 +11,12 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from app.ingest.chunker import split_identifier
+from app.ingest.source import TEST_PATH_PATTERN, is_test_path
 from app.models import Chunk, SearchHit, SourceFile
 
 # Tests mention every public name many times, so they crowd out the implementation
 # for "how does X work" questions. Halving their score is a prior, measured in evals.
-TEST_PATH_SQL = r"path ~ '(^|/)tests?/|(^|/)test_[^/]*$|_test\.py$'"
 TEST_PENALTY = 0.5
-_TEST_PATH = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*$|_test\.py$")
 RRF_K = 60  # standard constant from the RRF paper; dampens the impact of top ranks
 _STOPWORDS = frozenset(
     """a an and are as at be by can do does for from how i in is it of on or the this to what when
@@ -113,8 +112,11 @@ class RepoStore:
                   END AS phase_elapsed_s"""
 
     def list_repos(self) -> list[dict[str, Any]]:
+        """Repos people added. Eval checkouts (eval://…) share the database but stay out of the UI."""
         with self.pool.connection() as conn:
-            return conn.execute(f"SELECT {self._REPO_COLUMNS} FROM repos ORDER BY created_at DESC").fetchall()
+            return conn.execute(
+                f"SELECT {self._REPO_COLUMNS} FROM repos WHERE url NOT LIKE 'eval://%%' ORDER BY created_at DESC"
+            ).fetchall()
 
     def get_repo(self, repo_id: int) -> dict[str, Any] | None:
         with self.pool.connection() as conn:
@@ -131,6 +133,7 @@ class RepoStore:
         chunks: Sequence[Chunk],
         search_texts: Sequence[str],
         embeddings: Sequence[np.ndarray],
+        symbol_terms: Sequence[str] | None = None,
     ) -> None:
         """Swap the repo's index atomically so readers never see a half-built state."""
         with self.pool.connection() as conn, conn.transaction():
@@ -143,11 +146,13 @@ class RepoStore:
                 )
                 cur.executemany(
                     """INSERT INTO chunks (repo_id, path, symbol, kind, start_line, end_line,
-                                          content, search_text, embedding)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                          content, search_text, symbol_terms, embedding)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     [
-                        (repo_id, c.path, c.symbol, c.kind, c.start_line, c.end_line, c.content, st, emb)
-                        for c, st, emb in zip(chunks, search_texts, embeddings, strict=True)
+                        (repo_id, c.path, c.symbol, c.kind, c.start_line, c.end_line, c.content, st, terms, emb)
+                        for c, st, terms, emb in zip(
+                            chunks, search_texts, symbol_terms or [""] * len(chunks), embeddings, strict=True
+                        )
                     ],
                 )
 
@@ -171,11 +176,11 @@ class RepoStore:
         with self.pool.connection() as conn:
             rows = conn.execute(
                 f"""SELECT {self._HIT_COLUMNS},
-                           ts_rank_cd(tsv, q, 1) * CASE WHEN {TEST_PATH_SQL} THEN %s ELSE 1 END AS score
+                           ts_rank_cd(tsv, q, 1) * CASE WHEN path ~ %s THEN %s ELSE 1 END AS score
                     FROM chunks, to_tsquery('simple', %s) q
                     WHERE repo_id = %s AND tsv @@ q
                     ORDER BY score DESC LIMIT %s""",
-                (TEST_PENALTY, tsquery, repo_id, limit),
+                (TEST_PATH_PATTERN, TEST_PENALTY, tsquery, repo_id, limit),
             ).fetchall()
         return [SearchHit(**r, sources=["keyword"]) for r in rows]
 
@@ -189,7 +194,7 @@ class RepoStore:
             limit=pool_size,
         )
         for hit in fused:
-            if _TEST_PATH.search(hit.path):
+            if is_test_path(hit.path):
                 hit.score *= TEST_PENALTY
         return sorted(fused, key=lambda h: h.score, reverse=True)[:limit]
 

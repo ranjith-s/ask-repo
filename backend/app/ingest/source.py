@@ -16,8 +16,12 @@ from app.models import SourceFile
 # Only public github.com repos: keeps the clone step from becoming an SSRF vector.
 _GITHUB_URL = re.compile(r"^https://github\.com/(?P<owner>[\w.-]+)/(?P<name>[\w.-]+?)(?:\.git)?/?$")
 
-INDEXED_SUFFIXES = {".py", ".md", ".rst", ".txt", ".toml", ".cfg", ".ini", ".yml", ".yaml"}
-INDEXED_NAMES = {"Dockerfile", "Makefile"}
+CODE_SUFFIXES = {".py", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}
+INDEXED_SUFFIXES = CODE_SUFFIXES | {".md", ".rst", ".txt", ".toml", ".cfg", ".ini", ".yml", ".yaml"}
+# JSON is mostly data or lockfiles; only these few describe the project itself.
+INDEXED_NAMES = {"Dockerfile", "Makefile", "package.json", "tsconfig.json", "deno.json"}
+# Generated or bundled output: large, unreadable, and it would crowd out the real source.
+GENERATED_FILES = re.compile(r"\.(min|bundle|chunk)\.[cm]?js$|\.map$|(^|/)(vendor|vendors)\.[cm]?js$")
 SKIPPED_DIRS = {
     ".git",
     ".github",
@@ -32,7 +36,31 @@ SKIPPED_DIRS = {
     ".mypy_cache",
     ".pytest_cache",
     ".tox",
+    # JavaScript build output and caches
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".turbo",
+    ".parcel-cache",
+    ".yarn",
+    "coverage",
+    "bower_components",
 }
+# Test files, by the usual Python and JavaScript/TypeScript conventions: test/ tests/
+# __tests__/ spec/ e2e/ test-d/ directories, test_*.py, *_test.py, *.test.ts, *.spec.js …
+# The same pattern runs in Python and in Postgres (its regex syntax is compatible here).
+TEST_PATH_PATTERN = (
+    r"(^|/)(tests?|__tests__|specs?|e2e|test-d)/"
+    r"|(^|/)test_[^/]*\.py$|_test\.py$"
+    r"|\.(test|spec)\.[cm]?[jt]sx?$"
+)
+_TEST_PATH = re.compile(TEST_PATH_PATTERN)
+
+
+def is_test_path(rel_path: str) -> bool:
+    return _TEST_PATH.search(rel_path) is not None
+
+
 # Never index anything that commonly holds secrets.
 SECRET_PATTERNS = (re.compile(r"(^|/)\.env"), re.compile(r"\.(pem|key|p12|pfx)$"), re.compile(r"id_rsa"))
 
@@ -153,7 +181,7 @@ def is_indexable(rel_path: str) -> bool:
     parts = rel_path.split("/")
     if any(part in SKIPPED_DIRS for part in parts[:-1]):
         return False
-    if any(p.search(rel_path) for p in SECRET_PATTERNS):
+    if any(p.search(rel_path) for p in SECRET_PATTERNS) or GENERATED_FILES.search(rel_path):
         return False
     name = parts[-1]
     return name in INDEXED_NAMES or Path(name).suffix.lower() in INDEXED_SUFFIXES
