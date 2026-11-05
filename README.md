@@ -10,7 +10,8 @@ model actually read.
 
 Requires Docker and one of: an [Anthropic API key](https://console.anthropic.com/),
 a [Gemini API key](https://aistudio.google.com/apikey), or [Ollama](https://ollama.com)
-running locally. See [LLM providers](#llm-providers).
+running locally. See [LLM providers](#llm-providers). No Docker? See
+[Running without Docker](#running-without-docker).
 
 ```bash
 cp .env.example .env        # set LLM_PROVIDER and that provider's key
@@ -23,7 +24,8 @@ once indexing finishes (about a minute on CPU).
 ### Local development
 
 ```bash
-make db          # Postgres + pgvector in Docker
+make setup       # install backend and frontend dependencies (once)
+make db          # Postgres + pgvector: uses one already running locally, else starts it in Docker
 make dev         # API on :8000 (reload) and Vite on :5173
 make test        # backend tests against the real database
 make lint        # ruff, mypy, tsc
@@ -31,6 +33,64 @@ make eval        # retrieval eval, no API key needed
 ```
 
 Backend: Python 3.12 with [uv](https://docs.astral.sh/uv/). Frontend: Node 22.
+One `.env` at the repo root is used both by Docker Compose and by the backend run
+directly (`backend/.env`, if present, overrides it).
+
+### Running without Docker
+
+Docker only provides Postgres. Everything else already runs natively, so without Docker
+you need Postgres 16 with the [pgvector](https://github.com/pgvector/pgvector) extension,
+plus Python 3.12+ with uv, Node 22, and git (used to clone the repos you index).
+
+1. Install Postgres and pgvector.
+
+   macOS (Homebrew):
+   ```bash
+   brew install postgresql@16 pgvector
+   ```
+   ```bash
+   brew services start postgresql@16
+   ```
+
+   Ubuntu / Debian:
+   ```bash
+   sudo apt install postgresql-16 postgresql-16-pgvector
+   ```
+
+   Windows: use WSL2 and follow the Ubuntu steps.
+
+2. Create the user and database the app expects by default (on Linux, prefix each with
+   `sudo -u postgres`):
+   ```bash
+   psql postgres -c "CREATE USER askrepo WITH PASSWORD 'askrepo' SUPERUSER;"
+   ```
+   ```bash
+   psql postgres -c "CREATE DATABASE askrepo OWNER askrepo;"
+   ```
+   `SUPERUSER` lets the app create the `vector` extension and lets the tests create their
+   own `askrepo_test` database. That's fine on your machine; don't do it on a shared server.
+   To use an existing database instead, set `DATABASE_URL` in `.env`.
+
+3. Configure, install and run:
+   ```bash
+   cp .env.example .env      # set LLM_PROVIDER and its key
+   ```
+   ```bash
+   make setup
+   ```
+   ```bash
+   make dev
+   ```
+   Open http://localhost:5173. `make dev` sees Postgres already listening on
+   `localhost:5432` and does not try to start Docker. If your Postgres uses another port,
+   run `make dev DB_PORT=5433` and set `DATABASE_URL` to match.
+
+Differences from the Docker setup:
+- **First indexing is slower.** The embedding model (~130 MB) downloads once into a
+  local cache; the Docker image ships with it.
+- **Ollama** is reached at `http://localhost:11434` (the default outside Docker).
+- **If pgvector is missing**, the app stops at startup with a message saying how to install
+  it, rather than failing later.
 
 ## What it does
 

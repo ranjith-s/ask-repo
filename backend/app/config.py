@@ -4,9 +4,13 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# The repo-root .env (shared with Docker Compose) is read when running from backend/;
+# a backend/.env, if present, overrides it. Real environment variables win over both.
+ENV_FILES = ("../.env", ".env")
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ENV_FILES, extra="ignore")
 
     database_url: str = "postgresql://askrepo:askrepo@localhost:5432/askrepo"
 

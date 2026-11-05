@@ -11,6 +11,12 @@ from app.embeddings import HashEmbedder
 from app.ingest.pipeline import IngestionPipeline
 from app.store import RepoStore
 
+# Tests must not depend on the developer's own .env or exported LLM settings.
+Settings.model_config["env_file"] = None
+for _name in list(os.environ):
+    if _name.startswith(("LLM_", "ANTHROPIC_", "GEMINI_", "OLLAMA_", "PRICE_", "EMBEDDING_")):
+        del os.environ[_name]
+
 FIXTURE_REPO = Path(__file__).parent / "fixtures" / "sample_repo"
 TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://askrepo:askrepo@localhost:5432/askrepo_test")
 

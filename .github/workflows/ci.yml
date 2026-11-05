@@ -17,6 +17,17 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U askrepo" --health-interval 2s --health-retries 20
+      # Plain Postgres without pgvector, to test the "extension missing" error path.
+      plain-postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: askrepo
+          POSTGRES_PASSWORD: askrepo
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U askrepo" --health-interval 2s --health-retries 20
+    env:
+      PLAIN_POSTGRES_URL: postgresql://askrepo:askrepo@localhost:5433/postgres
     defaults:
       run:
         working-directory: backend
