@@ -35,7 +35,10 @@ make db          # make sure Postgres + pgvector is reachable (hosted, native, o
 make dev         # API on 127.0.0.1:8000 (reload) and the UI on http://localhost:5173
 make test        # backend tests against a real local database
 make lint        # ruff, mypy, tsc
+make fmt         # apply ruff fixes and formatting
 make eval        # retrieval eval, no API key needed (SET=ky or SET=express for JS/TS)
+make eval-answers SET=…  # answer eval on the configured AI provider (API providers cost money)
+make up          # the whole app in Docker (same as `docker compose up --build`); `make down` stops it
 ```
 
 Backend: Python 3.12 with [uv](https://docs.astral.sh/uv/). Frontend: Node 22 (React + Vite).
@@ -389,8 +392,8 @@ flowchart LR
 
 | Path | Responsibility |
 |------|----------------|
-| `backend/app/ingest/` | `source.py` (URL validation, streamed clone with progress, file filter), `chunker.py` (Python `ast`), `script_chunker.py` (JS/TS tree-sitter), `pipeline.py` (phases and progress) |
-| `backend/app/store.py` | All SQL: vector, keyword, hybrid (RRF), grep, file access, progress, query logs |
+| `backend/app/ingest/` | `source.py` (URL validation, streamed clone with progress, a watcher for timeout and cancel, file filter), `chunker.py` (Python `ast`), `script_chunker.py` (JS/TS tree-sitter), `pipeline.py` (phases, progress, cancellation) |
+| `backend/app/store.py` | All SQL: vector, keyword, hybrid (RRF), grep, file access, progress, cancel and remove, query logs |
 | `backend/app/agent/` | `runner.py` (both modes), `tools.py`, `prompts.py`, `citations.py` |
 | `backend/app/agent/llm/` | `base.py` (neutral types), one adapter per provider, `pricing.py` |
 | `backend/app/api.py` | HTTP routes; answers stream as server-sent events |
@@ -403,6 +406,22 @@ flowchart LR
 with reciprocal rank fusion. In the keyword index, the words of a section's name weigh most
 (camelCase and snake_case both split), then its file path, then its text. Test files rank at
 half weight, so implementations come first.
+
+## HTTP API
+
+The UI uses a small JSON API under `/api`, served by the same FastAPI app (interactive docs at
+`/docs` while it runs). Errors return `{"detail": "…"}` with a plain-language message.
+
+| Method and path | What it does | Notes |
+|---|---|---|
+| `GET /api/health` | Liveness check | `{"status": "ok"}` |
+| `GET /api/config` | Active provider and model, and any setup problem | `llm_problem` explains a missing key |
+| `GET /api/repos` | Projects with status and progress | Eval checkouts are hidden |
+| `POST /api/repos` `{"url": "https://github.com/owner/repo"}` | Add (or re-add) a project; setup runs in the background | `202`; `422` for a link that isn't a public GitHub repo |
+| `POST /api/repos/{id}/cancel` | Stop setting it up | `202`; `409` if it isn't being set up |
+| `DELETE /api/repos/{id}` | Remove it and everything indexed for it | `204`; `409` while it is being set up (cancel first) |
+| `GET /api/repos/{id}/file?path=…` | One file's contents, for the code viewer | `404` if the path isn't indexed |
+| `POST /api/repos/{id}/ask` `{"question": "…", "mode": "deep" \| "quick", "history": [{"question", "answer"}]}` | Answer a question, streamed as server-sent events | Events: `step`, `text`, `done` (citations, usage, cost, model), `error`; `409` while the project isn't ready, `503` if the AI isn't set up |
 
 ## Evaluation
 
@@ -497,7 +516,7 @@ JavaScript/TypeScript files that older versions skipped, and applies the newer k
 
 ## Engineering standards followed (and skipped) <!-- AUTHOR -->
 
-> _Notes:_ followed: typed Python (mypy), ruff, ~130 tests against a real Postgres (plus a
+> _Notes:_ followed: typed Python (mypy), ruff, ~140 tests against a real Postgres (plus a
 > plain Postgres in CI for the no-pgvector path), agent tests with a scripted LLM, provider
 > adapters tested against canned responses, failures reproduced before fixing, 12-factor
 > config with one `.env`, structured logs, small commits, CI building the Docker image,
@@ -521,6 +540,9 @@ JavaScript/TypeScript files that older versions skipped, and applies the newer k
 >   changed to `127.0.0.1`. The README's `docker compose up app` advice was wrong (it also
 >   starts the database); a dry run showed it.
 > - Ranking changes were accepted only with eval numbers, on all three languages.
+> - A cancellation test asserted "fewer than 4 batches" on a fixture that only has 3, so it
+>   could never fail. Tightened to "exactly 1", then confirmed it fails when the check is
+>   removed: tests were checked for the ability to fail, not just for passing.
 
 ## What I'd do with more time <!-- AUTHOR -->
 
@@ -543,6 +565,8 @@ JavaScript/TypeScript files that older versions skipped, and applies the newer k
   is set.
 - Ingestion runs in the API process. If the server restarts mid-index, the project is marked
   failed on startup and must be added again.
+- Cancelling takes a second or two: the pipeline checks about twice a second, and while making
+  a project searchable it stops at the next batch.
 - Eval runs index their pinned repos into the app's database (hidden from the UI).
 - Conversations live in the browser tab; reload starts fresh.
 - Native Windows (PowerShell, no WSL2) is supported in the code and covered by tests on Linux,
