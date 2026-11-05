@@ -5,7 +5,9 @@ These are working notes; the README explains the reasoning in prose.
 
 | Area | Chosen | Considered | Why (short) |
 |------|--------|------------|-------------|
-| Scope | Python repos only | Multi-language via tree-sitter | Fits the time box; the `ast` module needs no extra dependency and gives exact line ranges. The chunker interface allows adding languages later. |
+| Scope | Python, JavaScript, TypeScript | Python only (first version); all tree-sitter languages | Python first to fit the time box; JS/TS added next as the most common languages in web codebases. Others are one chunker each. |
+| JS/TS parsing | tree-sitter (`tree-sitter`, `tree-sitter-javascript`, `tree-sitter-typescript`) | Splitting into line windows; Babel or the TypeScript compiler via Node | Real syntax trees from Python with prebuilt wheels: no Node runtime in the backend, tolerant of syntax errors, exact line ranges. Same chunk kinds as the Python chunker, so retrieval and the agent need no changes. |
+| Name weighting | A `symbol_terms` column (name split into words in Python) carries the top keyword weight | Weighting the raw symbol | Postgres splits `snake_case` but not `camelCase`, so JS/TS names got almost no boost. Test chunks and loose code get no name weight. Measured on all three eval sets: see `eval-log.md`. |
 | Chunking | AST: function / method / class outline / module outline; windows for >120 lines; Markdown by heading | Fixed token windows; whole files | Retrieval units match how people ask ("how does X work"). Outlines answer "what's in this file". |
 | Embeddings | `BAAI/bge-small-en-v1.5` via fastembed (ONNX, CPU) | OpenAI / Voyage APIs; `jina-embeddings-v2-base-code` | No GPU, no second API key, ~130 MB. A code-specific model is the first thing to try next, measured with `make eval`. |
 | Vector DB | Postgres + pgvector | Chroma, Qdrant, Pinecone | One database for vectors, full-text search, files and logs. Hybrid search is a single SQL round trip each. Managed versions exist on every cloud. |

@@ -4,13 +4,15 @@ Ask Repo indexes a public GitHub repository and answers questions about its code
 with file:line citations. Backend: FastAPI + Postgres/pgvector. Frontend: React + Vite.
 
 ## Layout
-- `backend/app/ingest/`: clone → select files → chunk (Python `ast`) → embed → store
+- `backend/app/ingest/`: clone → select files → chunk (Python `ast`; JS/TS tree-sitter in
+  `script_chunker.py`) → embed → store
 - `backend/app/store.py`: **all SQL lives here**. Vector, keyword, hybrid (RRF), grep.
 - `backend/app/agent/`: tools, prompts, the agent loop, citation checks
 - `backend/app/agent/llm/`: provider-neutral types (`base.py`) and one adapter per provider
   (Anthropic, Gemini, Ollama). The runner never imports a provider SDK directly.
 - `backend/app/api.py`: HTTP routes only; no business logic
-- `backend/evals/`: retrieval and answer evals against a pinned Starlette checkout
+- `backend/evals/`: retrieval and answer evals; one pinned repo per language (`starlette`,
+  `ky`, `express`). Retrieval changes must be measured on all three.
 - `frontend/src/`: React app; `api.ts` is the only file that talks to the backend
 
 ## Commands

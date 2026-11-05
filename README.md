@@ -1,8 +1,8 @@
 # Ask Repo
 
-Ask questions about any public Python repository on GitHub and get answers that
-**cite the exact file and lines**, with every citation checked against what the
-model actually read.
+Ask questions about any public Python, JavaScript or TypeScript repository on GitHub and
+get answers that **cite the exact file and lines**, with every citation checked against
+what the model actually read.
 
 <!-- Add screenshots: docs/screenshots/answer.png, docs/screenshots/source-viewer.png -->
 
@@ -139,9 +139,12 @@ Things to know:
 
 ## What it does
 
-1. **Index**: paste a GitHub URL. The repo is shallow-cloned and Python files are
-   split along their syntax tree (functions, methods, class and module outlines).
-   Markdown and config files are split by heading or line window. Chunks are embedded
+1. **Index**: paste a GitHub URL. The repo is shallow-cloned and code is split along its
+   syntax tree: Python with the built-in `ast` module, JavaScript and TypeScript (`.js .jsx
+   .mjs .cjs .ts .tsx .mts .cts`) with tree-sitter. Each function, class, method,
+   interface/type and route handler becomes its own section, plus an outline of every file
+   and class. Markdown and config files (including `package.json`) are split by heading or
+   line window; build output (`dist/`, `*.min.js`, source maps, `.next/` …) is skipped. Chunks are embedded
    on CPU in batches and stored in Postgres with a full-text index. Each step shows live
    progress: download percentage and size while cloning, files parsed (and the current file),
    and chunks embedded with time left.
@@ -284,12 +287,18 @@ flowchart LR
 
 ## Evaluation
 
-`backend/evals/starlette.yaml` has 22 questions about `encode/starlette` pinned to one
-commit, in five categories: concept, lookup, location, dependencies, and negative
-(not answerable from the repo).
+Three eval sets, one per language, each pinned to one commit, in five categories:
+concept, lookup, location, dependencies, and negative (not answerable from the repo).
 
-- `make eval`: **retrieval**. hit@5 and MRR for vector, keyword and hybrid search. No API key.
-- `make eval-answers`: **answers**. Runs the real agent on the configured provider and scores whether answers cite an
+| Set | Repo | Language | Questions |
+|---|---|---|---|
+| `starlette` | `encode/starlette` | Python | 22 |
+| `ky` | `sindresorhus/ky` | TypeScript | 18 |
+| `express` | `expressjs/express` | JavaScript (CommonJS) | 19 |
+
+- `make eval` (or `make eval SET=ky`): **retrieval**. hit@5 and MRR for vector, keyword and
+  hybrid search. No API key.
+- `make eval-answers SET=express`: **answers**. Runs the real agent on the configured provider and scores whether answers cite an
   expected file, citation validity and grounding, declines on negative questions,
   steps, latency and cost.
 
@@ -359,6 +368,9 @@ Ranking changes were made one at a time and measured; see [`docs/eval-log.md`](d
 ## Known limitations
 
 - Public GitHub repositories only, default branch, up to 3,000 files of 300 KB each.
-- Python gets structure-aware chunking; other languages are not indexed.
+- Python, JavaScript and TypeScript get structure-aware chunking; other languages (Go, Java,
+  Rust …) are not indexed yet. tree-sitter has grammars for them, so each is one more chunker.
+- Citations use `[path:Lx-Ly]`, so files whose path contains `[` or `]` (Next.js routes such as
+  `app/[id]/page.tsx`) can be read and searched, but their citations won't render as links.
 - Ingestion runs in the API process. If the server restarts mid-index, the repo is marked failed on startup and must be added again.
 - Conversations live in the browser tab; reload starts fresh.
