@@ -54,3 +54,11 @@ def test_ask_without_api_key_is_a_clear_503(settings, embedder, store, indexed_r
     with TestClient(app) as c:
         resp = c.post(f"/api/repos/{indexed_repo['id']}/ask", json={"question": "hello?"})
     assert resp.status_code == 503 and "ANTHROPIC_API_KEY" in resp.json()["detail"]
+
+
+def test_startup_marks_interrupted_indexing_as_failed(settings, embedder, store):
+    repo_id = store.upsert_repo("https://github.com/example/stuck", "example/stuck")
+    store.set_status(repo_id, "embedding")
+    with TestClient(create_app(settings, embedder=embedder, llm=ScriptedLLM([]))):
+        repo = store.get_repo(repo_id)
+    assert repo is not None and repo["status"] == "failed" and "interrupted" in repo["error"]

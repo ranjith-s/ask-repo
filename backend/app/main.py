@@ -31,6 +31,8 @@ def create_app(settings: Settings | None = None, embedder: Embedder | None = Non
         pool = create_pool(settings.database_url)
         apply_schema(pool, settings.embedding_dim)
         store = RepoStore(pool)
+        if interrupted := store.fail_interrupted():
+            log.warning("ingest.interrupted_on_startup", repos=interrupted)
         emb = embedder or create_embedder(settings.embedding_backend, settings.embedding_model, settings.embedding_dim)
         app.state.settings = settings
         app.state.store = store

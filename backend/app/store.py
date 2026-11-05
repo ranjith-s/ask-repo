@@ -75,6 +75,15 @@ class RepoStore:
                 {"status": status, "error": error, "id": repo_id, **fields},
             )
 
+    def fail_interrupted(self) -> int:
+        """Ingestion runs in-process, so any repo still 'busy' at startup was interrupted."""
+        with self.pool.connection() as conn:
+            cur = conn.execute(
+                """UPDATE repos SET status = 'failed', error = 'Indexing was interrupted; add the repo again.'
+                   WHERE status IN ('pending', 'cloning', 'parsing', 'embedding')"""
+            )
+            return cur.rowcount
+
     def list_repos(self) -> list[dict[str, Any]]:
         with self.pool.connection() as conn:
             return conn.execute("SELECT * FROM repos ORDER BY created_at DESC").fetchall()
