@@ -5,6 +5,8 @@ import { AnswerCard, type Turn } from './components/AnswerCard'
 import { CodePanel } from './components/CodePanel'
 import { Sidebar } from './components/Sidebar'
 
+const PROVIDER_LABEL: Record<string, string> = { anthropic: 'Claude', gemini: 'Gemini', ollama: 'Ollama' }
+
 const SUGGESTIONS = [
   'Give me a tour of this codebase: the main modules and how they fit together.',
   'How is an incoming HTTP request routed to a handler?',
@@ -80,7 +82,7 @@ export default function App() {
               case 'text':
                 return { ...t, answer: t.answer + event.delta }
               case 'done':
-                return { ...t, status: 'done', citations: event.citations, usage: event.usage, latencyMs: event.latency_ms }
+                return { ...t, status: 'done', citations: event.citations, usage: event.usage, latencyMs: event.latency_ms, model: event.model }
               case 'error':
                 return { ...t, status: 'error', error: event.message }
             }
@@ -105,12 +107,12 @@ export default function App() {
         <div className="ml-auto flex items-center gap-2 text-xs text-stone-500">
           {config && (
             <span className="hidden items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 sm:flex dark:bg-stone-800">
-              <Sparkles className="size-3" /> {config.model}
+              <Sparkles className="size-3" /> {PROVIDER_LABEL[config.provider] ?? config.provider} · {config.model}
             </span>
           )}
-          {config && !config.llm_configured && (
+          {config?.llm_problem && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-              ANTHROPIC_API_KEY not set
+              {config.llm_problem}
             </span>
           )}
         </div>

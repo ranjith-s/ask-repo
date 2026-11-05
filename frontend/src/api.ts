@@ -31,19 +31,22 @@ export interface Usage {
   cache_write_tokens: number
   cache_read_tokens: number
   cost_usd: number
+  priced: boolean
 }
 
 export type AskEvent =
   | { type: 'step'; tool: string; summary: string; input?: Record<string, unknown>; is_error?: boolean; duration_ms: number; locations: Location[] }
   | { type: 'text'; delta: string }
-  | { type: 'done'; citations: Citation[]; usage: Usage; latency_ms: number }
+  | { type: 'done'; citations: Citation[]; usage: Usage; latency_ms: number; model: string }
   | { type: 'error'; message: string }
 
 export type Mode = 'quick' | 'deep'
 
 export interface ServerConfig {
+  provider: 'anthropic' | 'gemini' | 'ollama'
   model: string
   llm_configured: boolean
+  llm_problem: string | null
   embedding_model: string
 }
 

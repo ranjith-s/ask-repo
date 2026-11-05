@@ -25,6 +25,7 @@ export interface Turn {
   citations?: Citation[]
   usage?: Usage
   latencyMs?: number
+  model?: string
 }
 
 const TOOL_ICON: Record<string, ReactNode> = {
@@ -159,11 +160,24 @@ function Footer({ turn }: { turn: Turn }) {
       )}
       {turn.latencyMs !== undefined && <span>{(turn.latencyMs / 1000).toFixed(1)}s</span>}
       {usage && (
-        <span title={`input ${usage.input_tokens} · cache read ${usage.cache_read_tokens} · cache write ${usage.cache_write_tokens} · output ${usage.output_tokens}`}>
-          {(usage.input_tokens + usage.cache_read_tokens + usage.cache_write_tokens).toLocaleString()} in /{' '}
-          {usage.output_tokens.toLocaleString()} out tokens · ${usage.cost_usd.toFixed(4)}
+        <span
+          title={`uncached input ${usage.input_tokens} · cache read ${usage.cache_read_tokens} · cache write ${usage.cache_write_tokens} · output ${usage.output_tokens}`}
+        >
+          {totalIn(usage).toLocaleString()} in
+          {usage.cache_read_tokens > 0 && ` (${Math.round((100 * usage.cache_read_tokens) / totalIn(usage))}% cached)`} /{' '}
+          {usage.output_tokens.toLocaleString()} out tokens · {costLabel(usage)}
         </span>
       )}
+      {turn.model && <span className="text-stone-400">{turn.model}</span>}
     </div>
   )
+}
+
+function totalIn(u: Usage): number {
+  return u.input_tokens + u.cache_read_tokens + u.cache_write_tokens
+}
+
+function costLabel(u: Usage): string {
+  if (!u.priced) return 'cost n/a'
+  return u.cost_usd === 0 ? 'free' : `$${u.cost_usd.toFixed(4)}`
 }

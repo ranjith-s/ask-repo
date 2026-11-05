@@ -20,6 +20,11 @@ services:
     environment:
       DATABASE_URL: postgresql://askrepo:askrepo@db:5432/askrepo
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Ollama runs on your machine, not in this stack; reach it through the host.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # makes the name work on Linux too
     ports: ["8000:8000"]
     depends_on:
       db: { condition: service_healthy }
