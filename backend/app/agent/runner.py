@@ -14,9 +14,23 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from app.agent.citations import check_citations
-from app.agent.llm import LLM, LLMRefusal, TextDelta, TurnResult, Usage
+from app.agent.llm import (
+    LLM,
+    AssistantMessage,
+    LLMRefusal,
+    LLMUnavailable,
+    Message,
+    Price,
+    TextDelta,
+    ToolResult,
+    ToolResultsMessage,
+    ToolSpec,
+    TurnResult,
+    Usage,
+    UserMessage,
+)
 from app.agent.prompts import AGENT_SYSTEM, QUICK_SYSTEM, format_context
-from app.agent.tools import TOOL_DEFINITIONS, RepoTools, repo_map
+from app.agent.tools import TOOL_SPECS, RepoTools, repo_map
 from app.config import Settings
 from app.embeddings import Embedder
 from app.observability import log
@@ -33,11 +47,17 @@ class HistoryTurn:
 
 
 class QuestionAnswerer:
-    def __init__(self, store: RepoStore, embedder: Embedder, llm: LLM, settings: Settings) -> None:
+    def __init__(
+        self, store: RepoStore, embedder: Embedder, llm: LLM, settings: Settings, price: Price | None = None
+    ) -> None:
         self.store = store
         self.embedder = embedder
         self.llm = llm
         self.settings = settings
+        self.price = price  # None: unknown model, cost reported as 0
+
+    def _cost(self, usage: Usage) -> float:
+        return round(self.price.cost(usage), 5) if self.price else 0.0
 
     async def answer(
         self,
@@ -67,11 +87,13 @@ class QuestionAnswerer:
             yield {
                 "type": "done",
                 "citations": [c.to_dict() for c in citations],
-                "usage": usage.__dict__ | {"cost_usd": round(usage.cost_usd(self.settings), 5)},
+                "usage": usage.__dict__ | {"cost_usd": self._cost(usage), "priced": self.price is not None},
+                "model": f"{self.llm.provider}/{self.llm.model}",
                 "latency_ms": _ms(started),
             }
-        except LLMRefusal as exc:
+        except (LLMRefusal, LLMUnavailable) as exc:
             error = str(exc)
+            log.warning("answer.llm_error", repo_id=repo["id"], error=error, provider=self.llm.provider)
             yield {"type": "error", "message": error}
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
@@ -85,6 +107,8 @@ class QuestionAnswerer:
                 steps=len(steps),
                 latency_ms=_ms(started),
                 error=error,
+                provider=self.llm.provider,
+                model=self.llm.model,
                 **usage.__dict__,
             )
             self.store.log_query(
@@ -92,9 +116,13 @@ class QuestionAnswerer:
                 question=question,
                 mode=mode,
                 steps=steps,
-                input_tokens=usage.input_tokens + usage.cache_read_tokens + usage.cache_write_tokens,
+                provider=self.llm.provider,
+                model=self.llm.model,
+                input_tokens=usage.input_tokens,
+                cache_read_tokens=usage.cache_read_tokens,
+                cache_write_tokens=usage.cache_write_tokens,
                 output_tokens=usage.output_tokens,
-                cost_usd=usage.cost_usd(self.settings),
+                cost_usd=self._cost(usage),
                 latency_ms=_ms(started),
                 error=error,
             )
@@ -102,8 +130,8 @@ class QuestionAnswerer:
     async def _quick(
         self,
         tools: RepoTools,
-        system: list[dict[str, Any]],
-        messages: list[dict[str, Any]],
+        system: str,
+        messages: list[Message],
         question: str,
         usage: Usage,
     ) -> AsyncIterator[Event]:
@@ -116,7 +144,7 @@ class QuestionAnswerer:
             "duration_ms": _ms(t0),
             "locations": [{"path": h.path, "start": h.start_line, "end": h.end_line} for h in hits],
         }
-        messages.append({"role": "user", "content": f"{format_context(hits)}\n\nQuestion: {question}"})
+        messages.append(UserMessage(f"{format_context(hits)}\n\nQuestion: {question}"))
         async for event in self._turn(system, messages, [], allow_tools=False, usage=usage):
             if event["type"] == "turn":
                 yield {"type": "final", "text": event["result"].text}
@@ -126,18 +154,16 @@ class QuestionAnswerer:
     async def _deep(
         self,
         tools: RepoTools,
-        system: list[dict[str, Any]],
-        messages: list[dict[str, Any]],
+        system: str,
+        messages: list[Message],
         question: str,
         usage: Usage,
     ) -> AsyncIterator[Event]:
-        messages.append({"role": "user", "content": question})
+        messages.append(UserMessage(question))
         max_steps = self.settings.agent_max_steps
         for step in range(max_steps):
             turn: TurnResult | None = None
-            async for event in self._turn(
-                system, messages, TOOL_DEFINITIONS, allow_tools=step < max_steps - 1, usage=usage
-            ):
+            async for event in self._turn(system, messages, TOOL_SPECS, allow_tools=step < max_steps - 1, usage=usage):
                 if event["type"] == "turn":
                     turn = event["result"]
                 else:
@@ -146,8 +172,8 @@ class QuestionAnswerer:
             if not turn.tool_calls:
                 yield {"type": "final", "text": turn.text}
                 return
-            messages.append({"role": "assistant", "content": turn.content})
-            results = []
+            messages.append(turn.message)
+            results: list[ToolResult] = []
             for call in turn.tool_calls:  # all results go back in ONE user message
                 t0 = time.perf_counter()
                 outcome = await tools.run(call.name, call.input)
@@ -160,21 +186,14 @@ class QuestionAnswerer:
                     "duration_ms": _ms(t0),
                     "locations": outcome.locations,
                 }
-                results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": call.id,
-                        "content": outcome.content,
-                        "is_error": outcome.is_error,
-                    }
-                )
-            messages.append({"role": "user", "content": results})
+                results.append(ToolResult(call.id, call.name, outcome.content, outcome.is_error))
+            messages.append(ToolResultsMessage(results))
 
     async def _turn(
         self,
-        system: list[dict[str, Any]],
-        messages: list[dict[str, Any]],
-        tool_defs: list[dict[str, Any]],
+        system: str,
+        messages: list[Message],
+        tool_defs: list[ToolSpec],
         allow_tools: bool,
         usage: Usage,
     ) -> AsyncIterator[Event]:
@@ -188,20 +207,19 @@ class QuestionAnswerer:
                 usage.add(item.usage)
                 yield {"type": "turn", "result": item}
 
-    def _system(self, repo: dict[str, Any], template: str) -> list[dict[str, Any]]:
+    def _system(self, repo: dict[str, Any], template: str) -> str:
+        """Stable per repo (no timestamps or ids), so providers can cache it across questions."""
         paths = self.store.list_paths(repo["id"])
-        text = template.format(
+        return template.format(
             name=repo["name"], commit=(repo.get("commit_sha") or "local")[:10], repo_map=repo_map(paths)
         )
-        # Stable per repo, so tools + system prompt are cached across questions.
-        return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
 
-    def _history_messages(self, history: list[HistoryTurn]) -> list[dict[str, Any]]:
+    def _history_messages(self, history: list[HistoryTurn]) -> list[Message]:
         """Only previous Q&A text is kept, not tool traffic: cheap, and enough for follow-ups."""
-        messages: list[dict[str, Any]] = []
+        messages: list[Message] = []
         for turn in history[-self.settings.history_max_turns :]:
-            messages.append({"role": "user", "content": turn.question})
-            messages.append({"role": "assistant", "content": turn.answer})
+            messages.append(UserMessage(turn.question))
+            messages.append(AssistantMessage(turn.answer))
         return messages
 
 

@@ -54,7 +54,13 @@ def health() -> dict[str, str]:
 @router.get("/config")
 def public_config(request: Request) -> dict[str, Any]:
     s: Settings = request.app.state.settings
-    return {"model": s.llm_model, "llm_configured": bool(s.anthropic_api_key), "embedding_model": s.embedding_model}
+    return {
+        "provider": s.llm_provider,
+        "model": s.model,
+        "llm_configured": s.llm_problem() is None,
+        "llm_problem": s.llm_problem(),
+        "embedding_model": s.embedding_model,
+    }
 
 
 @router.get("/repos")
@@ -90,8 +96,8 @@ def get_file(repo_id: int, path: str, store: StoreDep) -> dict[str, Any]:
 @router.post("/repos/{repo_id}/ask")
 async def ask(repo_id: int, body: AskRequest, request: Request, store: StoreDep) -> StreamingResponse:
     settings: Settings = request.app.state.settings
-    if not settings.anthropic_api_key:
-        raise HTTPException(503, "ANTHROPIC_API_KEY is not set on the server")
+    if problem := settings.llm_problem():
+        raise HTTPException(503, f"LLM not configured: {problem}")
     if len(body.question) > settings.question_max_chars:
         raise HTTPException(422, f"Question is too long (max {settings.question_max_chars} characters)")
     repo = store.get_repo(repo_id)

@@ -53,6 +53,8 @@ def test_ask_without_api_key_is_a_clear_503(settings, embedder, store, indexed_r
     app = create_app(settings.model_copy(update={"anthropic_api_key": None}), embedder=embedder, llm=ScriptedLLM([]))
     with TestClient(app) as c:
         resp = c.post(f"/api/repos/{indexed_repo['id']}/ask", json={"question": "hello?"})
+        config = c.get("/api/config").json()
+    assert config["llm_configured"] is False and config["provider"] == "anthropic"
     assert resp.status_code == 503 and "ANTHROPIC_API_KEY" in resp.json()["detail"]
 
 

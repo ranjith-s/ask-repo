@@ -10,16 +10,20 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://askrepo:askrepo@localhost:5432/askrepo"
 
-    # LLM
-    anthropic_api_key: str | None = None
-    llm_model: str = "claude-opus-5-5"
-    llm_effort: str = "medium"
+    # LLM. Provider: "anthropic" | "gemini" | "ollama". The model defaults per provider.
+    llm_provider: str = "anthropic"
+    llm_model: str | None = None
+    llm_effort: str = "medium"  # Claude only: low | medium | high
     llm_max_tokens: int = 16000
-    # USD per million tokens, used for the per-query cost estimate.
-    price_input_per_mtok: float = 4.0
-    price_output_per_mtok: float = 20.0
-    price_cache_write_per_mtok: float = 5.0
-    price_cache_read_per_mtok: float = 0.20
+    anthropic_api_key: str | None = None
+    gemini_api_key: str | None = None
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_num_ctx: int = 32768  # Ollama's default context is too small for tool results
+    # USD per million tokens. Leave unset to use the built-in table in llm/pricing.py.
+    price_input_per_mtok: float | None = None
+    price_output_per_mtok: float | None = None
+    price_cache_write_per_mtok: float | None = None
+    price_cache_read_per_mtok: float | None = None
 
     # Embeddings: "fastembed" (local CPU model) or "hash" (offline, tests only).
     embedding_backend: str = "fastembed"
@@ -40,6 +44,22 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
     static_dir: str = "static"
+
+    @property
+    def model(self) -> str:
+        from app.agent.llm.pricing import DEFAULT_MODELS
+
+        return self.llm_model or DEFAULT_MODELS.get(self.llm_provider, "")
+
+    def llm_problem(self) -> str | None:
+        """Why the configured LLM can't be used, or None if it looks ready."""
+        if self.llm_provider == "anthropic" and not self.anthropic_api_key:
+            return "ANTHROPIC_API_KEY is not set"
+        if self.llm_provider == "gemini" and not self.gemini_api_key:
+            return "GEMINI_API_KEY is not set"
+        if self.llm_provider not in ("anthropic", "gemini", "ollama"):
+            return f"Unknown LLM_PROVIDER: {self.llm_provider}"
+        return None
 
 
 @lru_cache

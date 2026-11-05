@@ -9,6 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.agent.llm.base import ToolSpec
 from app.embeddings import Embedder
 from app.models import SearchHit
 from app.store import RepoStore
@@ -19,30 +20,28 @@ SNIPPET_LINES = 12
 # Outlines are synthesized summaries, so seeing one is not evidence for the lines it spans.
 SYNTHETIC_KINDS = {"module", "class"}
 
-TOOL_DEFINITIONS: list[dict[str, Any]] = [
-    {
-        "name": "search_code",
-        "description": (
+TOOL_SPECS: list[ToolSpec] = [
+    ToolSpec(
+        name="search_code",
+        description=(
             "Hybrid semantic + keyword search over the repository's functions, classes, "
             "module outlines and docs. Use natural language or identifiers. Returns ranked "
             "locations with a short snippet; call read_file to see more."
         ),
-        "strict": True,
-        "input_schema": {
+        parameters={
             "type": "object",
             "properties": {"query": {"type": "string", "description": "What to look for"}},
             "required": ["query"],
             "additionalProperties": False,
         },
-    },
-    {
-        "name": "grep",
-        "description": (
+    ),
+    ToolSpec(
+        name="grep",
+        description=(
             "Exact, case-sensitive substring search across all indexed files. Best for "
             "finding where an identifier is defined or used, e.g. 'def url_path_for' or 'CORSMiddleware('."
         ),
-        "strict": True,
-        "input_schema": {
+        parameters={
             "type": "object",
             "properties": {
                 "pattern": {"type": "string", "description": "Literal text to find (min 2 chars)"},
@@ -51,12 +50,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "required": ["pattern", "path_prefix"],
             "additionalProperties": False,
         },
-    },
-    {
-        "name": "read_file",
-        "description": f"Read a line range of a file (1-based, inclusive, max {READ_FILE_MAX_LINES} lines).",
-        "strict": True,
-        "input_schema": {
+    ),
+    ToolSpec(
+        name="read_file",
+        description=f"Read a line range of a file (1-based, inclusive, max {READ_FILE_MAX_LINES} lines).",
+        parameters={
             "type": "object",
             "properties": {
                 "path": {"type": "string"},
@@ -66,18 +64,17 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "required": ["path", "start_line", "end_line"],
             "additionalProperties": False,
         },
-    },
-    {
-        "name": "list_files",
-        "description": "List indexed file paths under a directory prefix ('' for the whole repo).",
-        "strict": True,
-        "input_schema": {
+    ),
+    ToolSpec(
+        name="list_files",
+        description="List indexed file paths under a directory prefix ('' for the whole repo).",
+        parameters={
             "type": "object",
             "properties": {"path_prefix": {"type": "string"}},
             "required": ["path_prefix"],
             "additionalProperties": False,
         },
-    },
+    ),
 ]
 
 

@@ -1,7 +1,7 @@
 """Answer eval: run the real agent on every question and score the answers.
 
-Needs ANTHROPIC_API_KEY and costs real money (estimated ~$0.10-0.20 per question
-in deep mode at current Opus 5.5 prices; check the printed total).
+Uses the configured LLM_PROVIDER. On Claude it costs real money (estimated ~$0.08-0.15 per question
+in deep mode on Opus 5.5 with history caching; check the printed total). Ollama is free.
 
 Scored automatically, no LLM judge:
   answered        - finished without an error
@@ -22,7 +22,7 @@ import statistics
 from datetime import UTC, datetime
 from typing import Any
 
-from app.agent.llm import AnthropicLLM
+from app.agent.llm import create_llm, resolve_price
 from app.agent.runner import QuestionAnswerer
 from app.config import Settings
 from evals.common import EVALS_DIR, index_eval_repo, load_eval_set
@@ -35,11 +35,11 @@ DECLINE = re.compile(
 
 async def run(mode: str, only: set[str] | None) -> None:
     settings = Settings()
-    if not settings.anthropic_api_key:
-        raise SystemExit("Set ANTHROPIC_API_KEY to run the answer eval.")
+    if problem := settings.llm_problem():
+        raise SystemExit(f"Cannot run the answer eval: {problem}")
     eval_set = load_eval_set()
     ctx = index_eval_repo(eval_set, settings)
-    answerer = QuestionAnswerer(ctx.store, ctx.embedder, AnthropicLLM(settings), settings)
+    answerer = QuestionAnswerer(ctx.store, ctx.embedder, create_llm(settings), settings, resolve_price(settings))
 
     rows: list[dict[str, Any]] = []
     for q in eval_set.questions:
@@ -96,13 +96,14 @@ async def run(mode: str, only: set[str] | None) -> None:
         "total_cost_usd": round(sum(r["cost_usd"] for r in rows), 4),
     }
     print("\n" + "\n".join(f"{k:<20}{v}" for k, v in summary.items()))
-    out = EVALS_DIR / "results" / f"answers-{mode}.json"
+    out = EVALS_DIR / "results" / f"answers-{settings.llm_provider}-{mode}.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(
         json.dumps(
             {
                 "run_at": datetime.now(UTC).isoformat(),
-                "model": settings.llm_model,
+                "provider": settings.llm_provider,
+                "model": settings.model,
                 "effort": settings.llm_effort,
                 "summary": summary,
                 "rows": rows,

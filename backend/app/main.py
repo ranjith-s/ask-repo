@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.agent.llm import LLM, AnthropicLLM
+from app.agent.llm import LLM, create_llm, resolve_price
 from app.agent.runner import QuestionAnswerer
 from app.api import router
 from app.config import Settings, get_settings
@@ -37,8 +37,17 @@ def create_app(settings: Settings | None = None, embedder: Embedder | None = Non
         app.state.settings = settings
         app.state.store = store
         app.state.pipeline = IngestionPipeline(store, emb, settings)
-        app.state.answerer = QuestionAnswerer(store, emb, llm or AnthropicLLM(settings), settings)
-        log.info("app.started", model=settings.llm_model, embedding=settings.embedding_backend)
+        price = resolve_price(settings)
+        app.state.answerer = QuestionAnswerer(store, emb, llm or create_llm(settings), settings, price)
+        log.info(
+            "app.started",
+            provider=settings.llm_provider,
+            model=settings.model,
+            embedding=settings.embedding_backend,
+            llm_problem=settings.llm_problem(),
+        )
+        if price is None:
+            log.warning("llm.unpriced_model", model=settings.model, hint="set PRICE_* env vars to show costs")
         yield
         pool.close()
 

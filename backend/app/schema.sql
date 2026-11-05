@@ -60,3 +60,9 @@ CREATE TABLE IF NOT EXISTS query_logs (
     error          TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Added with multi-provider support; idempotent for databases created earlier.
+ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS provider TEXT;
+ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS cache_read_tokens INT NOT NULL DEFAULT 0;
+ALTER TABLE query_logs ADD COLUMN IF NOT EXISTS cache_write_tokens INT NOT NULL DEFAULT 0;

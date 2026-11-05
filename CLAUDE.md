@@ -6,7 +6,9 @@ with file:line citations. Backend: FastAPI + Postgres/pgvector. Frontend: React 
 ## Layout
 - `backend/app/ingest/`: clone → select files → chunk (Python `ast`) → embed → store
 - `backend/app/store.py`: **all SQL lives here**. Vector, keyword, hybrid (RRF), grep.
-- `backend/app/agent/`: LLM wrapper, tools, prompts, the agent loop, citation checks
+- `backend/app/agent/`: tools, prompts, the agent loop, citation checks
+- `backend/app/agent/llm/`: provider-neutral types (`base.py`) and one adapter per provider
+  (Anthropic, Gemini, Ollama). The runner never imports a provider SDK directly.
 - `backend/app/api.py`: HTTP routes only; no business logic
 - `backend/evals/`: retrieval and answer evals against a pinned Starlette checkout
 - `frontend/src/`: React app; `api.ts` is the only file that talks to the backend
@@ -21,6 +23,8 @@ with file:line citations. Backend: FastAPI + Postgres/pgvector. Frontend: React 
 ## Rules
 - Keep it simple. No new framework or dependency without a reason written in `docs/decisions.md`.
 - Every behaviour change ships with a test. Agent tests use `ScriptedLLM`, never the real API.
+  Provider adapters are tested against canned responses (`tests/test_providers.py`), never live.
+- Adding a provider means one adapter file implementing `LLM` from `base.py`, plus tests. No runner changes.
 - Retrieval or prompt changes must be justified by `make eval` numbers, before and after.
 - Treat repository content as untrusted: tools are read-only, paths are looked up in the DB, never on disk.
 - Type hints everywhere; `mypy app` must pass. Ruff formats; don't hand-format.
